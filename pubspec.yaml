@@ -43,6 +43,8 @@ dependencies:
   font_awesome_flutter: ^11.0.0
   webview_flutter: ^4.13.1
   webview_flutter_android: ^4.12.0
+  share_plus: ^13.1.0
+  cached_network_image: ^3.4.1
 
 dev_dependencies:
   flutter_test:

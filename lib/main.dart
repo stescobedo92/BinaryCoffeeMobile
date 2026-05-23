@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
@@ -77,6 +79,31 @@ class BinaryCoffeeApp extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
         isDense: true,
       ),
+      appBarTheme: AppBarTheme(
+        centerTitle: false,
+        backgroundColor: dark ? AppColors.darkChrome : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: Border(
+          bottom: BorderSide(
+            color: dark ? AppColors.darkBorder : AppColors.lightBorder,
+          ),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: dark ? AppColors.darkChrome : Colors.white,
+        indicatorColor: scheme.primary.withValues(alpha: .16),
+        labelTextStyle: WidgetStatePropertyAll(
+          TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: dark ? AppColors.darkChrome : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+      ),
     );
   }
 }
@@ -95,6 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchController = TextEditingController();
   StreamSubscription<Uri>? _linkSubscription;
   Timer? _debounce;
+  int _tabIndex = 0;
 
   AppController get controller => widget.controller;
 
@@ -176,76 +204,56 @@ class _HomeScreenState extends State<HomeScreen> {
             child: CustomScrollView(
               controller: _scrollController,
               slivers: [
-                SliverToBoxAdapter(
-                  child: _Header(
-                    controller: controller,
-                    searchController: _searchController,
-                    onSearch: _onSearchChanged,
-                    onFilters: () => _openFilters(context),
+                if (_tabIndex == 0) ..._homeSlivers(context, wide),
+                if (_tabIndex == 1)
+                  _savedSliver(
+                    context,
+                    title: 'Guardados',
+                    posts: controller.favoritePosts,
+                    empty: 'Guarda articulos para leerlos despues.',
                   ),
-                ),
-                if (controller.authorName != null)
-                  SliverToBoxAdapter(
-                    child: _Constrained(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                        child: MaterialBanner(
-                          content: Text('Posts de ${controller.authorName}'),
-                          leading: const Icon(Icons.person_search_outlined),
-                          actions: [
-                            TextButton(
-                              onPressed: controller.clearAuthorFilter,
-                              child: const Text('Limpiar'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                if (_tabIndex == 2)
+                  _savedSliver(
+                    context,
+                    title: 'Historial',
+                    posts: controller.readHistoryPosts,
+                    empty: 'Los articulos que abras apareceran aqui.',
                   ),
-                if (controller.loading && controller.posts.isEmpty)
-                  const SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                if (controller.error != null && controller.posts.isEmpty)
-                  SliverFillRemaining(
-                    child: _ErrorState(
-                      message: controller.error!,
-                      onRetry: controller.refresh,
-                    ),
-                  ),
-                if (!controller.loading || controller.posts.isNotEmpty)
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      wide ? 24 : 12,
-                      12,
-                      wide ? 24 : 12,
-                      12,
-                    ),
-                    sliver: SliverList.builder(
-                      itemCount: controller.posts.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index == controller.posts.length) {
-                          return _LoadMore(controller: controller);
-                        }
-                        return _Constrained(
-                          child: PostCard(
-                            post: controller.posts[index],
-                            index: index + 1,
-                            signedIn: controller.session != null,
-                            onAuthor: controller.filterByAuthor,
-                            onLike: () => _guarded(
-                              context,
-                              () => controller.like(controller.posts[index]),
-                            ),
-                            onOpen: () =>
-                                _openPost(context, controller.posts[index]),
-                          ),
-                        );
-                      },
-                    ),
+                if (_tabIndex == 3)
+                  _savedSliver(
+                    context,
+                    title: 'Offline',
+                    posts: controller.cachedPosts,
+                    empty: 'Abre articulos para dejarlos disponibles offline.',
                   ),
               ],
             ),
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tabIndex,
+            onDestinationSelected: (value) => setState(() => _tabIndex = value),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.dynamic_feed_outlined),
+                selectedIcon: Icon(Icons.dynamic_feed),
+                label: 'Inicio',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.bookmark_border),
+                selectedIcon: Icon(Icons.bookmark),
+                label: 'Guardados',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.history_outlined),
+                selectedIcon: Icon(Icons.history),
+                label: 'Historial',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.offline_pin_outlined),
+                selectedIcon: Icon(Icons.offline_pin),
+                label: 'Offline',
+              ),
+            ],
           ),
           floatingActionButton: controller.session == null
               ? null
@@ -256,6 +264,155 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
         );
       },
+    );
+  }
+
+  List<Widget> _homeSlivers(BuildContext context, bool wide) => [
+    SliverToBoxAdapter(
+      child: _Header(
+        controller: controller,
+        searchController: _searchController,
+        onSearch: _onSearchChanged,
+        onFilters: () => _openFilters(context),
+      ),
+    ),
+    if (controller.newPostName != null)
+      SliverToBoxAdapter(
+        child: _Constrained(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: FilledButton.tonalIcon(
+              onPressed: controller.refresh,
+              icon: const Icon(Icons.fiber_new_outlined),
+              label: const Text('Hay articulos nuevos'),
+            ),
+          ),
+        ),
+      ),
+    if (controller.authorName != null)
+      SliverToBoxAdapter(
+        child: _Constrained(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: MaterialBanner(
+              content: Text('Posts de ${controller.authorName}'),
+              leading: const Icon(Icons.person_search_outlined),
+              actions: [
+                TextButton(
+                  onPressed: controller.clearAuthorFilter,
+                  child: const Text('Limpiar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    if (controller.search.isEmpty &&
+        controller.selectedTags.isEmpty &&
+        controller.authorName == null)
+      SliverToBoxAdapter(
+        child: _Constrained(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            child: Column(
+              children: [
+                _HighlightRail(
+                  title: 'Mas vistos',
+                  posts: controller.topViewedPosts,
+                  onOpen: (post) => _openPost(context, post),
+                ),
+                _HighlightRail(
+                  title: 'Mas comentados',
+                  posts: controller.topCommentedPosts,
+                  onOpen: (post) => _openPost(context, post),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    if (controller.loading && controller.posts.isEmpty)
+      const SliverFillRemaining(
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    if (controller.error != null && controller.posts.isEmpty)
+      SliverFillRemaining(
+        child: _ErrorState(message: controller.error!, onRetry: controller.refresh),
+      ),
+    if (!controller.loading || controller.posts.isNotEmpty)
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(wide ? 24 : 12, 12, wide ? 24 : 12, 12),
+        sliver: SliverList.builder(
+          itemCount: controller.posts.length + 1,
+          itemBuilder: (context, index) {
+            if (index == controller.posts.length) {
+              return _LoadMore(controller: controller);
+            }
+            final post = controller.posts[index];
+            return _Constrained(
+              child: PostCard(
+                post: post,
+                index: index + 1,
+                signedIn: controller.session != null,
+                favorite: controller.favoritePostIds.contains(post.id),
+                liked: controller.likedPostIds.contains(post.id),
+                onAuthor: (author) => _openAuthor(context, author),
+                onLike: () => _guarded(context, () => controller.like(post)),
+                onFavorite: () => controller.toggleFavorite(post),
+                onShare: () => _share(post),
+                onOpen: () => _openPost(context, post),
+              ),
+            );
+          },
+        ),
+      ),
+  ];
+
+  Widget _savedSliver(
+    BuildContext context, {
+    required String title,
+    required List<Post> posts,
+    required String empty,
+  }) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 88),
+      sliver: posts.isEmpty
+          ? SliverFillRemaining(
+              hasScrollBody: false,
+              child: _EmptyLibrary(title: title, message: empty),
+            )
+          : SliverList.builder(
+              itemCount: posts.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return _Constrained(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  );
+                }
+                final post = posts[index - 1];
+                return _Constrained(
+                  child: PostCard(
+                    post: post,
+                    index: index,
+                    signedIn: controller.session != null,
+                    favorite: controller.favoritePostIds.contains(post.id),
+                    liked: controller.likedPostIds.contains(post.id),
+                    onAuthor: (author) => _openAuthor(context, author),
+                    onLike: () => _guarded(context, () => controller.like(post)),
+                    onFavorite: () => controller.toggleFavorite(post),
+                    onShare: () => _share(post),
+                    onOpen: () => _openPost(context, post),
+                  ),
+                );
+              },
+            ),
     );
   }
 
@@ -279,7 +436,26 @@ class _HomeScreenState extends State<HomeScreen> {
     if (handled && mounted) {
       Navigator.of(context).maybePop();
       _snack(context, 'Sesion iniciada con GitHub');
+      return;
     }
+    final name = _postNameFromUri(uri);
+    if (name == null || !mounted) return;
+    try {
+      final post = await controller.api.getPostByName(name);
+      if (post != null && mounted) _openPost(context, post);
+    } catch (_) {}
+  }
+
+  String? _postNameFromUri(Uri uri) {
+    if (uri.scheme == 'binarycoffee' && uri.host == 'post') {
+      return uri.pathSegments.isEmpty ? null : uri.pathSegments.first;
+    }
+    if (uri.host == 'binarycoffee.dev' &&
+        uri.pathSegments.length >= 2 &&
+        uri.pathSegments.first == 'post') {
+      return uri.pathSegments[1];
+    }
+    return null;
   }
 
   Future<void> _guarded(
@@ -325,9 +501,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openPost(BuildContext context, Post post) {
+    controller.markOpened(post);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PostDetailScreen(controller: controller, post: post),
+      ),
+    );
+  }
+
+  void _openAuthor(BuildContext context, Author author) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AuthorDetailScreen(controller: controller, author: author),
+      ),
+    );
+  }
+
+  Future<void> _share(Post post) async {
+    await SharePlus.instance.share(
+      ShareParams(
+        text: '${post.title}\n${BinaryCoffeeApi.siteUrl}/post/${post.name}',
       ),
     );
   }
@@ -359,9 +552,10 @@ class _Header extends StatelessWidget {
                 color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                  color: controller.selectedTag.isEmpty
-                      ? Theme.of(context).dividerColor.withValues(alpha: .35)
-                      : Theme.of(context).colorScheme.primary,
+                color: controller.selectedTag.isEmpty
+                        && controller.selectedTags.isEmpty
+                    ? Theme.of(context).dividerColor.withValues(alpha: .35)
+                    : Theme.of(context).colorScheme.primary,
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -402,6 +596,45 @@ class _Header extends StatelessWidget {
                   onDeleted: () => controller.toggleTag(controller.selectedTag),
                 ),
               ),
+            if (controller.selectedTags.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final tag in controller.selectedTags)
+                      InputChip(
+                        label: Text(tag),
+                        avatar: const Icon(Icons.sell_outlined, size: 16),
+                        onDeleted: () => controller.toggleAdvancedTag(tag),
+                      ),
+                  ],
+                ),
+              ),
+            if (controller.recentSearches.isNotEmpty && controller.search.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: SizedBox(
+                  height: 34,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: controller.recentSearches.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final search = controller.recentSearches[index];
+                      return ActionChip(
+                        avatar: const Icon(Icons.history, size: 15),
+                        label: Text(search),
+                        onPressed: () {
+                          searchController.text = search;
+                          onSearch(search);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -433,10 +666,10 @@ class FilterSheet extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                if (controller.selectedTag.isNotEmpty)
+                if (controller.selectedTag.isNotEmpty ||
+                    controller.selectedTags.isNotEmpty)
                   TextButton(
-                    onPressed: () =>
-                        controller.toggleTag(controller.selectedTag),
+                    onPressed: controller.clearTags,
                     child: const Text('Limpiar'),
                   ),
               ],
@@ -450,11 +683,10 @@ class FilterSheet extends StatelessWidget {
                   children: controller.tags.map((tag) {
                     final selected = controller.selectedTag == tag.name;
                     return FilterChip(
-                      selected: selected,
+                      selected: selected || controller.selectedTags.contains(tag.name),
                       label: Text(tag.name),
                       onSelected: (_) {
-                        controller.toggleTag(tag.name);
-                        Navigator.pop(context);
+                        controller.toggleAdvancedTag(tag.name);
                       },
                     );
                   }).toList(),
@@ -468,22 +700,154 @@ class FilterSheet extends StatelessWidget {
   }
 }
 
+class _HighlightRail extends StatelessWidget {
+  const _HighlightRail({
+    required this.title,
+    required this.posts,
+    required this.onOpen,
+  });
+
+  final String title;
+  final List<Post> posts;
+  final ValueChanged<Post> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    if (posts.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8, top: 4),
+          child: Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ),
+        SizedBox(
+          height: 118,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: posts.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final post = posts[index];
+              return SizedBox(
+                width: 250,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => onOpen(post),
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Theme.of(context).dividerColor.withValues(alpha: .35),
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '#${index + 1}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          post.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const Spacer(),
+                        Row(
+                          children: [
+                            _Metric(icon: Icons.visibility_outlined, label: '${post.views}'),
+                            const SizedBox(width: 10),
+                            _Metric(icon: Icons.chat_bubble_outline, label: '${post.comments}'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+}
+
+class _EmptyLibrary extends StatelessWidget {
+  const _EmptyLibrary({required this.title, required this.message});
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Constrained(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.local_library_outlined,
+                size: 42,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(message, textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class PostCard extends StatelessWidget {
   const PostCard({
     super.key,
     required this.post,
     required this.index,
     required this.signedIn,
+    required this.favorite,
+    required this.liked,
     required this.onAuthor,
     required this.onLike,
+    required this.onFavorite,
+    required this.onShare,
     required this.onOpen,
   });
 
   final Post post;
   final int index;
   final bool signedIn;
+  final bool favorite;
+  final bool liked;
   final ValueChanged<Author> onAuthor;
   final VoidCallback onLike;
+  final VoidCallback onFavorite;
+  final VoidCallback onShare;
   final VoidCallback onOpen;
 
   @override
@@ -521,12 +885,13 @@ class PostCard extends StatelessWidget {
                     if (post.bannerUrl != null)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(4),
-                        child: Image.network(
-                          post.bannerUrl!,
+                        child: CachedNetworkImage(
+                          imageUrl: post.bannerUrl!,
                           height: 82,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _FallbackBanner(),
+                          placeholder: (_, _) => _FallbackBanner(),
+                          errorWidget: (_, _, _) => _FallbackBanner(),
                         ),
                       ),
                     if (post.bannerUrl != null) const SizedBox(height: 8),
@@ -587,7 +952,7 @@ class PostCard extends StatelessWidget {
                         InkWell(
                           onTap: signedIn ? onLike : null,
                           child: _Metric(
-                            icon: Icons.favorite_border,
+                            icon: liked ? Icons.favorite : Icons.favorite_border,
                             label: '${post.likes}',
                             faded: !signedIn,
                           ),
@@ -598,6 +963,21 @@ class PostCard extends StatelessWidget {
                           label: '${post.comments}',
                         ),
                         const Spacer(),
+                        IconButton(
+                          tooltip: favorite ? 'Quitar guardado' : 'Guardar',
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            favorite ? Icons.bookmark : Icons.bookmark_border,
+                            size: 18,
+                          ),
+                          onPressed: onFavorite,
+                        ),
+                        IconButton(
+                          tooltip: 'Compartir',
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.ios_share_outlined, size: 18),
+                          onPressed: onShare,
+                        ),
                         IconButton.filledTonal(
                           tooltip: 'Abrir en binarycoffee.dev',
                           visualDensity: VisualDensity.compact,
@@ -636,10 +1016,10 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
-  late Future<Post?> _future = widget.controller.api.getPostByName(
-    widget.post.name,
-  );
+  late Future<Post?> _future = widget.controller.getPostDetail(widget.post);
   final _commentController = TextEditingController();
+  bool _readingMode = false;
+  double _fontSize = 15;
 
   @override
   void dispose() {
@@ -653,6 +1033,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       appBar: AppBar(
         title: const Text('Articulo'),
         actions: [
+          IconButton(
+            tooltip: _readingMode ? 'Vista normal' : 'Modo lectura',
+            onPressed: () => setState(() => _readingMode = !_readingMode),
+            icon: Icon(_readingMode ? Icons.view_agenda : Icons.menu_book_outlined),
+          ),
+          IconButton(
+            tooltip: 'Compartir',
+            onPressed: () => SharePlus.instance.share(
+              ShareParams(
+                text:
+                    '${widget.post.title}\n${BinaryCoffeeApi.siteUrl}/post/${widget.post.name}',
+              ),
+            ),
+            icon: const Icon(Icons.ios_share_outlined),
+          ),
           IconButton(
             onPressed: () => launchUrl(
               Uri.parse('${BinaryCoffeeApi.siteUrl}/post/${widget.post.name}'),
@@ -685,14 +1080,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (post.bannerUrl != null)
+                    if (!_readingMode && post.bannerUrl != null)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          post.bannerUrl!,
+                        child: CachedNetworkImage(
+                          imageUrl: post.bannerUrl!,
                           height: 190,
                           width: double.infinity,
                           fit: BoxFit.cover,
+                          errorWidget: (_, _, _) => _FallbackBanner(),
                         ),
                       ),
                     const SizedBox(height: 14),
@@ -723,8 +1119,36 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         ),
                       ],
                     ),
+                    if (_readingMode) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(Icons.format_size, size: 18),
+                          Expanded(
+                            child: Slider(
+                              min: 13,
+                              max: 21,
+                              divisions: 8,
+                              value: _fontSize,
+                              onChanged: (value) =>
+                                  setState(() => _fontSize = value),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const Divider(height: 28),
-                    MarkdownBody(data: post.body),
+                    MarkdownBody(
+                      data: post.body,
+                      styleSheet: MarkdownStyleSheet.fromTheme(
+                        Theme.of(context),
+                      ).copyWith(
+                        p: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontSize: _fontSize,
+                          height: _readingMode ? 1.62 : 1.42,
+                        ),
+                      ),
+                    ),
                     const Divider(height: 32),
                     Text(
                       'Comentarios (${post.commentsList.length})',
@@ -764,8 +1188,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           await widget.controller.comment(post, body);
                           _commentController.clear();
                           setState(
-                            () => _future = widget.controller.api.getPostByName(
-                              widget.post.name,
+                            () => _future = widget.controller.getPostDetail(
+                              widget.post,
                             ),
                           );
                         },
@@ -779,6 +1203,201 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class AuthorDetailScreen extends StatefulWidget {
+  const AuthorDetailScreen({
+    super.key,
+    required this.controller,
+    required this.author,
+  });
+
+  final AppController controller;
+  final Author author;
+
+  @override
+  State<AuthorDetailScreen> createState() => _AuthorDetailScreenState();
+}
+
+class _AuthorDetailScreenState extends State<AuthorDetailScreen> {
+  late Future<List<Post>> _future = widget.controller.api.getAuthorPosts(
+    widget.author.id,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final isMe = widget.controller.session?.id == widget.author.id;
+    final session = widget.controller.session;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isMe ? 'Mi perfil' : widget.author.username),
+        actions: [
+          IconButton(
+            tooltip: 'Filtrar posts',
+            icon: const Icon(Icons.filter_alt_outlined),
+            onPressed: () {
+              widget.controller.filterByAuthor(widget.author);
+              Navigator.pop(context);
+            },
+          ),
+        ],
+      ),
+      body: FutureBuilder<List<Post>>(
+        future: _future,
+        builder: (context, snapshot) {
+          final posts = snapshot.data ?? const <Post>[];
+          return RefreshIndicator(
+            onRefresh: () async {
+              setState(() {
+                _future = widget.controller.api.getAuthorPosts(
+                  widget.author.id,
+                );
+              });
+              await _future;
+            },
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              children: [
+                _Constrained(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 34,
+                            backgroundImage: NetworkImage(
+                              widget.author.avatarUrl ??
+                                  'https://github.com/${widget.author.username}.png?size=128',
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.author.username,
+                                  style: Theme.of(context).textTheme.headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.w900),
+                                ),
+                                if (isMe && session != null)
+                                  Text(
+                                    [
+                                      if (session.email != null) session.email!,
+                                      if (session.roleName != null) session.roleName!,
+                                      if (session.confirmed == true) 'confirmado',
+                                    ].join(' · '),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          _StatPill(label: 'Posts', value: '${posts.length}'),
+                          const SizedBox(width: 8),
+                          _StatPill(
+                            label: 'Views',
+                            value:
+                                '${posts.fold<int>(0, (sum, post) => sum + post.views)}',
+                          ),
+                          const SizedBox(width: 8),
+                          _StatPill(
+                            label: 'Likes',
+                            value:
+                                '${posts.fold<int>(0, (sum, post) => sum + post.likes)}',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+                if (snapshot.connectionState == ConnectionState.waiting)
+                  const Padding(
+                    padding: EdgeInsets.all(28),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (snapshot.hasError)
+                  _ErrorState(
+                    message: snapshot.error.toString(),
+                    onRetry: () => setState(() {
+                      _future = widget.controller.api.getAuthorPosts(
+                        widget.author.id,
+                      );
+                    }),
+                  ),
+                for (var i = 0; i < posts.length; i++)
+                  _Constrained(
+                    child: PostCard(
+                      post: posts[i],
+                      index: i + 1,
+                      signedIn: widget.controller.session != null,
+                      favorite: widget.controller.favoritePostIds.contains(
+                        posts[i].id,
+                      ),
+                      liked: widget.controller.likedPostIds.contains(posts[i].id),
+                      onAuthor: (_) {},
+                      onLike: () => widget.controller.like(posts[i]),
+                      onFavorite: () => widget.controller.toggleFavorite(posts[i]),
+                      onShare: () => SharePlus.instance.share(
+                        ShareParams(
+                          text:
+                              '${posts[i].title}\n${BinaryCoffeeApi.siteUrl}/post/${posts[i].name}',
+                        ),
+                      ),
+                      onOpen: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PostDetailScreen(
+                            controller: widget.controller,
+                            post: posts[i],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StatPill extends StatelessWidget {
+  const _StatPill({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          child: Column(
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(label, style: Theme.of(context).textTheme.labelSmall),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -820,7 +1439,13 @@ class _ProfileSheetState extends State<ProfileSheet> {
                   ),
                 ),
                 title: Text(session.username),
-                subtitle: Text(session.email ?? ''),
+                subtitle: Text(
+                  [
+                    if (session.email != null) session.email!,
+                    if (session.roleName != null) session.roleName!,
+                    if (session.confirmed == true) 'confirmado',
+                  ].join(' · '),
+                ),
               ),
               SwitchListTile(
                 value: widget.controller.notificationsEnabled,
@@ -1029,6 +1654,7 @@ class _DraftSheetState extends State<DraftSheet> {
   final _title = TextEditingController();
   final _body = TextEditingController();
   bool _busy = false;
+  bool _preview = false;
 
   @override
   void dispose() {
@@ -1056,12 +1682,45 @@ class _DraftSheetState extends State<DraftSheet> {
             decoration: const InputDecoration(labelText: 'Titulo'),
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: _body,
-            minLines: 8,
-            maxLines: 14,
-            decoration: const InputDecoration(labelText: 'Contenido Markdown'),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.edit_outlined),
+                label: Text('Editar'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.preview_outlined),
+                label: Text('Preview'),
+              ),
+            ],
+            selected: {_preview},
+            onSelectionChanged: (value) =>
+                setState(() => _preview = value.first),
           ),
+          const SizedBox(height: 10),
+          if (_preview)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).dividerColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: MarkdownBody(data: _body.text),
+              ),
+            )
+          else
+            TextField(
+              controller: _body,
+              minLines: 8,
+              maxLines: 14,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Contenido Markdown',
+              ),
+            ),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _busy
@@ -1183,6 +1842,7 @@ class AppColors {
   static const lightBg = Color(0xFFFAFFFE);
   static const lightBorder = Color(0xFFEDF5F1);
   static const darkBg = Color(0xFF111B21);
+  static const darkChrome = Color(0xFF121A17);
   static const darkCard = Color(0xFF1A2730);
   static const darkBorder = Color(0xFF2A3942);
 }

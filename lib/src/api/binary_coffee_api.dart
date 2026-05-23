@@ -21,14 +21,16 @@ class BinaryCoffeeApi {
     int start = 0,
     String search = '',
     String tag = '',
+    List<String> tags = const [],
     String authorId = '',
+    List<String> sort = const ['publishedAt:desc'],
   }) async {
     final filters = <String, dynamic>{
       'enable': {'eq': true},
       if (search.trim().isNotEmpty) 'title': {'containsi': search.trim()},
-      if (tag.isNotEmpty)
+      if (tag.isNotEmpty || tags.isNotEmpty)
         'tags': {
-          'name': {'eq': tag},
+          'name': tags.isEmpty ? {'eq': tag} : {'in': tags},
         },
       if (authorId.isNotEmpty)
         'author': {
@@ -38,7 +40,7 @@ class BinaryCoffeeApi {
     final data = await _graphql(_postsQuery, {
       'limit': limit,
       'start': start,
-      'sort': ['publishedAt:desc'],
+      'sort': sort,
       'filters': filters,
     });
     return ((data['posts']?['data'] as List<dynamic>?) ?? const [])
@@ -70,9 +72,20 @@ class BinaryCoffeeApi {
         .toList();
   }
 
+  Future<List<Post>> getTopPosts({
+    String metric = 'views',
+    int limit = 6,
+  }) async {
+    return getPosts(limit: limit, sort: ['$metric:desc', 'publishedAt:desc']);
+  }
+
+  Future<List<Post>> getAuthorPosts(String authorId, {int limit = 20}) async {
+    return getPosts(limit: limit, authorId: authorId);
+  }
+
   Future<UserSession> getMe(String jwt) async {
     final data = await _graphql(
-      'query { me { id, username, email, avatar { url } } }',
+      'query { me { id, username, email, confirmed, blocked, role { id name description type } } }',
       const {},
       jwt,
     );

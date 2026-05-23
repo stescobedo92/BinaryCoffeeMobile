@@ -5,6 +5,9 @@ class UserSession {
     this.email,
     this.avatarUrl,
     required this.jwt,
+    this.confirmed,
+    this.blocked,
+    this.roleName,
   });
 
   factory UserSession.fromMe(Map<String, dynamic> json, String jwt) {
@@ -20,6 +23,9 @@ class UserSession {
                 ? 'https://github.com/$username.png?size=96'
                 : 'https://api.binarycoffee.dev$avatar'),
       jwt: jwt,
+      confirmed: json['confirmed'] as bool?,
+      blocked: json['blocked'] as bool?,
+      roleName: json['role']?['name'] as String?,
     );
   }
 
@@ -29,6 +35,11 @@ class UserSession {
     email: json['email'],
     avatarUrl: json['avatarUrl'],
     jwt: json['jwt'] ?? '',
+    confirmed: json['confirmed'] == null
+        ? null
+        : json['confirmed'] == 'true',
+    blocked: json['blocked'] == null ? null : json['blocked'] == 'true',
+    roleName: json['roleName'],
   );
 
   final String id;
@@ -36,11 +47,17 @@ class UserSession {
   final String? email;
   final String? avatarUrl;
   final String jwt;
+  final bool? confirmed;
+  final bool? blocked;
+  final String? roleName;
 
   Map<String, String> toPrefs() {
     final values = {'id': id, 'username': username, 'jwt': jwt};
     if (email != null) values['email'] = email!;
     if (avatarUrl != null) values['avatarUrl'] = avatarUrl!;
+    if (confirmed != null) values['confirmed'] = confirmed.toString();
+    if (blocked != null) values['blocked'] = blocked.toString();
+    if (roleName != null) values['roleName'] = roleName!;
     return values;
   }
 }

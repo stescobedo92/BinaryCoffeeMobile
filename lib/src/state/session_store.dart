@@ -6,7 +6,16 @@ import '../models/post.dart';
 import '../models/user_session.dart';
 
 class SessionStore {
-  static const _keys = ['id', 'username', 'email', 'avatarUrl', 'jwt'];
+  static const _keys = [
+    'id',
+    'username',
+    'email',
+    'avatarUrl',
+    'jwt',
+    'confirmed',
+    'blocked',
+    'roleName',
+  ];
   static const _favoritePostIdsKey = 'blog.favoritePostIds';
   static const _readHistoryPostIdsKey = 'blog.readHistoryPostIds';
   static const _recentSearchesKey = 'blog.recentSearches';
