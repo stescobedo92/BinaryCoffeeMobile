@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import 'src/api/binary_coffee_api.dart';
 import 'src/models/post.dart';
@@ -130,9 +131,10 @@ class _HomeScreenState extends State<HomeScreen> {
             title: Row(
               children: [
                 Image.asset(
-                  'assets/images/app_icon.png',
-                  height: 30,
-                  width: 30,
+                  'assets/images/title_icon.png',
+                  height: 28,
+                  width: 28,
+                  fit: BoxFit.contain,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -870,9 +872,14 @@ class _ProfileSheetState extends State<ProfileSheet> {
                     : () async {
                         setState(() => _busy = true);
                         try {
-                          await launchUrl(
-                            widget.controller.api.githubAuthorizeUri(),
-                            mode: LaunchMode.externalApplication,
+                          if (!mounted) return;
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              fullscreenDialog: true,
+                              builder: (_) => GitHubAuthScreen(
+                                controller: widget.controller,
+                              ),
+                            ),
                           );
                         } finally {
                           if (mounted) setState(() => _busy = false);
@@ -921,6 +928,76 @@ class _ProfileSheetState extends State<ProfileSheet> {
         content: Text(
           'Posts cargados: ${posts.length}\nViews: ${posts.fold<int>(0, (s, p) => s + p.views)}\nLikes: ${posts.fold<int>(0, (s, p) => s + p.likes)}\nComentarios: ${posts.fold<int>(0, (s, p) => s + p.comments)}',
         ),
+      ),
+    );
+  }
+}
+
+class GitHubAuthScreen extends StatefulWidget {
+  const GitHubAuthScreen({super.key, required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<GitHubAuthScreen> createState() => _GitHubAuthScreenState();
+}
+
+class _GitHubAuthScreenState extends State<GitHubAuthScreen> {
+  late final WebViewController _webViewController;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (_) => setState(() => _loading = true),
+          onPageFinished: (_) => setState(() => _loading = false),
+          onNavigationRequest: (request) {
+            final uri = Uri.parse(request.url);
+            if (uri.scheme == 'binarycoffee' && uri.host == 'auth') {
+              _finish(uri);
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+        ),
+      )
+      ..loadRequest(widget.controller.api.githubAuthorizeUri());
+  }
+
+  Future<void> _finish(Uri uri) async {
+    try {
+      final handled = await widget.controller.handleAuthRedirect(uri);
+      if (!mounted) return;
+      if (handled) {
+        Navigator.of(context).pop();
+        Navigator.of(context).maybePop();
+        _snack(context, 'Sesion iniciada con GitHub');
+      }
+    } catch (e) {
+      if (mounted) _snack(context, e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('GitHub'),
+        leading: IconButton(
+          tooltip: 'Cerrar',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close),
+        ),
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _webViewController),
+          if (_loading) const LinearProgressIndicator(),
+        ],
       ),
     );
   }
