@@ -8,12 +8,14 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'src/api/binary_coffee_api.dart';
+import 'src/models/podcast_episode.dart';
 import 'src/models/post.dart';
 import 'src/state/app_controller.dart';
 
@@ -166,6 +168,18 @@ class AppText {
   String get saved => es ? 'Guardados' : 'Saved';
   String get history => es ? 'Historial' : 'History';
   String get offline => 'Offline';
+  String get podcasts => 'Podcasts';
+  String get espacioBinario => 'Espacio Binario';
+  String get podcastCopy => es
+      ? 'Episodios del podcast de Binary Coffee publicados en Spotify.'
+      : 'Binary Coffee podcast episodes published on Spotify.';
+  String get podcastEmpty =>
+      es ? 'No hay episodios disponibles.' : 'No episodes available.';
+  String get openSpotify => es ? 'Abrir Spotify' : 'Open Spotify';
+  String get nowPlaying => es ? 'Reproduciendo' : 'Now playing';
+  String get play => es ? 'Reproducir' : 'Play';
+  String get pause => es ? 'Pausar' : 'Pause';
+  String get backToPodcasts => es ? 'Volver a podcasts' : 'Back to podcasts';
   String get draft => es ? 'Borrador' : 'Draft';
   String get savedEmpty => es
       ? 'Guarda articulos para leerlos despues.'
@@ -244,8 +258,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
+  final _podcastPlayer = AudioPlayer();
   StreamSubscription<Uri>? _linkSubscription;
   Timer? _debounce;
+  PodcastEpisode? _currentEpisode;
+  bool _podcastPreparing = false;
   int _tabIndex = 0;
 
   AppController get controller => widget.controller;
@@ -266,6 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _debounce?.cancel();
     _linkSubscription?.cancel();
+    _podcastPlayer.dispose();
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -365,12 +383,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     posts: controller.cachedPosts,
                     empty: text.offlineEmpty,
                   ),
+                if (_tabIndex == 4) _podcastSliver(context),
               ],
             ),
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tabIndex,
-            onDestinationSelected: (value) => setState(() => _tabIndex = value),
+            onDestinationSelected: _selectTab,
             destinations: [
               NavigationDestination(
                 icon: const Icon(Icons.dynamic_feed_outlined),
@@ -391,6 +410,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: const Icon(Icons.offline_pin_outlined),
                 selectedIcon: const Icon(Icons.offline_pin),
                 label: text.offline,
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.podcasts_outlined),
+                selectedIcon: const Icon(Icons.podcasts),
+                label: text.podcasts,
               ),
             ],
           ),
@@ -514,6 +538,76 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
   ];
+
+  void _selectTab(int value) {
+    setState(() => _tabIndex = value);
+    if (value == 4) unawaited(controller.loadPodcasts());
+  }
+
+  Widget _podcastSliver(BuildContext context) {
+    final text = context.text;
+    if (!controller.loadingPodcasts &&
+        controller.podcastEpisodes.isEmpty &&
+        controller.podcastError == null) {
+      unawaited(controller.loadPodcasts());
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 88),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate([
+          _Constrained(
+            child: _PodcastHeader(
+              onOpenSpotify: () => launchUrl(
+                Uri.parse(BinaryCoffeeApi.espacioBinarioSpotifyUrl),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
+          ),
+          if (_currentEpisode != null)
+            _Constrained(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _PodcastPlayerBanner(
+                  episode: _currentEpisode!,
+                  player: _podcastPlayer,
+                  preparing: _podcastPreparing,
+                  onBack: _closePodcastPlayer,
+                  onPlayPause: () => _playPauseEpisode(_currentEpisode!),
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
+          if (controller.loadingPodcasts)
+            const Padding(
+              padding: EdgeInsets.only(top: 80),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (controller.podcastError != null)
+            _Constrained(
+              child: _ErrorState(
+                message: controller.podcastError!,
+                onRetry: controller.refreshPodcasts,
+              ),
+            )
+          else if (controller.podcastEpisodes.isEmpty)
+            _EmptyLibrary(title: text.podcasts, message: text.podcastEmpty)
+          else
+            for (final episode in controller.podcastEpisodes.where(
+              (episode) => episode.id != _currentEpisode?.id,
+            ))
+              _Constrained(
+                child: PodcastEpisodeCard(
+                  episode: episode,
+                  selected: false,
+                  preparing: false,
+                  player: _podcastPlayer,
+                  onPlayPause: () => _playPauseEpisode(episode),
+                ),
+              ),
+        ]),
+      ),
+    );
+  }
 
   Widget _savedSliver(
     BuildContext context, {
@@ -673,6 +767,45 @@ class _HomeScreenState extends State<HomeScreen> {
         text: '${post.title}\n${BinaryCoffeeApi.siteUrl}/post/${post.name}',
       ),
     );
+  }
+
+  Future<void> _playPauseEpisode(PodcastEpisode episode) async {
+    if (_podcastPreparing) return;
+    final sameEpisode = _currentEpisode?.id == episode.id;
+    if (sameEpisode && _podcastPlayer.playing) {
+      await _podcastPlayer.pause();
+      if (mounted) setState(() {});
+      return;
+    }
+    try {
+      setState(() {
+        _currentEpisode = episode;
+        _podcastPreparing = !sameEpisode;
+      });
+      if (!sameEpisode) {
+        await _podcastPlayer.setUrl(episode.audioUrl);
+      }
+      if (mounted) {
+        setState(() => _podcastPreparing = false);
+      }
+      unawaited(_podcastPlayer.play());
+    } catch (e) {
+      if (mounted) _snack(context, e.toString());
+    } finally {
+      if (mounted && _podcastPreparing) {
+        setState(() => _podcastPreparing = false);
+      }
+    }
+  }
+
+  Future<void> _closePodcastPlayer() async {
+    await _podcastPlayer.stop();
+    if (mounted) {
+      setState(() {
+        _currentEpisode = null;
+        _podcastPreparing = false;
+      });
+    }
   }
 }
 
@@ -986,6 +1119,487 @@ class _EmptyLibrary extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PodcastHeader extends StatelessWidget {
+  const _PodcastHeader({required this.onOpenSpotify});
+
+  final VoidCallback onOpenSpotify;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = context.text;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: .32),
+        ),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: const _PodcastArtwork(
+              url: BinaryCoffeeApi.espacioBinarioArtworkUrl,
+              size: 58,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  text.espacioBinario,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  text.podcastCopy,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: text.openSpotify,
+            onPressed: onOpenSpotify,
+            icon: const FaIcon(FontAwesomeIcons.spotify, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PodcastEpisodeCard extends StatelessWidget {
+  const PodcastEpisodeCard({
+    super.key,
+    required this.episode,
+    required this.selected,
+    required this.preparing,
+    required this.player,
+    required this.onPlayPause,
+  });
+
+  final PodcastEpisode episode;
+  final bool selected;
+  final bool preparing;
+  final AudioPlayer player;
+  final VoidCallback onPlayPause;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = context.text;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _PodcastArtwork(url: episode.imageUrl, size: 58),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          episode.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _PodcastPlayButton(
+                        player: player,
+                        selected: selected,
+                        preparing: preparing,
+                        size: 32,
+                        iconSize: 16,
+                        onPressed: onPlayPause,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      DateFormat.yMMMd(text.locale).format(episode.publishedAt),
+                      if (episode.duration != null)
+                        _formatDuration(episode.duration!),
+                    ].join(' · '),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.color?.withValues(alpha: .7),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    episode.description,
+                    maxLines: selected ? 4 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (selected) ...[
+                    const SizedBox(height: 8),
+                    _PodcastProgress(player: player),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PodcastPlayerBanner extends StatelessWidget {
+  const _PodcastPlayerBanner({
+    required this.episode,
+    required this.player,
+    required this.preparing,
+    required this.onBack,
+    required this.onPlayPause,
+  });
+
+  final PodcastEpisode episode;
+  final AudioPlayer player;
+  final bool preparing;
+  final VoidCallback onBack;
+  final VoidCallback onPlayPause;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = context.text;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: .32),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconButton(
+                tooltip: text.backToPodcasts,
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              const SizedBox(width: 4),
+              _PodcastArtwork(url: episode.imageUrl, size: 78),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      text.nowPlaying,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      episode.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      [
+                        DateFormat.yMMMd(
+                          text.locale,
+                        ).format(episode.publishedAt),
+                        if (episode.duration != null)
+                          _formatDuration(episode.duration!),
+                      ].join(' · '),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.color?.withValues(alpha: .72),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _PodcastPlayButton(
+                player: player,
+                selected: true,
+                preparing: preparing,
+                size: 48,
+                iconSize: 24,
+                onPressed: onPlayPause,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            _podcastMainDescription(episode.description),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          const _PodcastSocialLinks(),
+          const SizedBox(height: 10),
+          _PodcastProgress(player: player),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: Text(text.backToPodcasts),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PodcastPlayButton extends StatelessWidget {
+  const _PodcastPlayButton({
+    required this.player,
+    required this.selected,
+    required this.preparing,
+    required this.onPressed,
+    this.size = 48,
+    this.iconSize = 24,
+  });
+
+  final AudioPlayer player;
+  final bool selected;
+  final bool preparing;
+  final VoidCallback onPressed;
+  final double size;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = context.text;
+    return StreamBuilder<PlayerState>(
+      stream: player.playerStateStream,
+      builder: (context, snapshot) {
+        final state = snapshot.data;
+        final buffering =
+            preparing ||
+            (selected &&
+                !(state?.playing ?? false) &&
+                (state?.processingState == ProcessingState.loading ||
+                    state?.processingState == ProcessingState.buffering));
+        final isPlaying = selected && (state?.playing ?? false);
+        return SizedBox.square(
+          dimension: size,
+          child: IconButton.filled(
+            tooltip: isPlaying ? text.pause : text.play,
+            iconSize: iconSize,
+            style: IconButton.styleFrom(
+              fixedSize: Size.square(size),
+              minimumSize: Size.square(size),
+              maximumSize: Size.square(size),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+            onPressed: buffering ? null : onPressed,
+            icon: buffering
+                ? SizedBox.square(
+                    dimension: iconSize - 3,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(isPlaying ? Icons.pause : Icons.play_arrow_rounded),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PodcastSocialLinks extends StatelessWidget {
+  const _PodcastSocialLinks();
+
+  static const _telegramUrl = 'https://t.me/binarycoffeedev';
+  static const _twitterUrl = 'https://twitter.com/espac10binar10';
+  static const _websiteUrl = BinaryCoffeeApi.siteUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _PodcastSocialButton(
+          tooltip: 'Telegram',
+          onPressed: () => launchUrl(
+            Uri.parse(_telegramUrl),
+            mode: LaunchMode.externalApplication,
+          ),
+          icon: const FaIcon(FontAwesomeIcons.telegram, size: 18),
+        ),
+        const SizedBox(width: 8),
+        _PodcastSocialButton(
+          tooltip: 'Twitter',
+          onPressed: () => launchUrl(
+            Uri.parse(_twitterUrl),
+            mode: LaunchMode.externalApplication,
+          ),
+          icon: const FaIcon(FontAwesomeIcons.twitter, size: 18),
+        ),
+        const SizedBox(width: 8),
+        _PodcastSocialButton(
+          tooltip: BinaryCoffeeApi.siteUrl,
+          onPressed: () => launchUrl(
+            Uri.parse(_websiteUrl),
+            mode: LaunchMode.externalApplication,
+          ),
+          icon: const Icon(Icons.public_rounded, size: 18),
+        ),
+      ],
+    );
+  }
+}
+
+class _PodcastSocialButton extends StatelessWidget {
+  const _PodcastSocialButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final Widget icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.filledTonal(
+      tooltip: tooltip,
+      iconSize: 18,
+      style: IconButton.styleFrom(
+        fixedSize: const Size.square(36),
+        minimumSize: const Size.square(36),
+        maximumSize: const Size.square(36),
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      onPressed: onPressed,
+      icon: icon,
+    );
+  }
+}
+
+class _PodcastProgress extends StatelessWidget {
+  const _PodcastProgress({required this.player});
+
+  final AudioPlayer player;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<Duration>(
+      stream: player.positionStream,
+      builder: (context, positionSnapshot) {
+        final position = positionSnapshot.data ?? Duration.zero;
+        return StreamBuilder<Duration?>(
+          stream: player.durationStream,
+          builder: (context, durationSnapshot) {
+            final duration = durationSnapshot.data ?? player.duration;
+            final max = duration?.inMilliseconds.toDouble() ?? 1;
+            final value = position.inMilliseconds.clamp(0, max.toInt());
+            return Column(
+              children: [
+                Slider(
+                  value: value.toDouble(),
+                  max: max <= 0 ? 1 : max,
+                  onChanged: duration == null
+                      ? null
+                      : (next) =>
+                            player.seek(Duration(milliseconds: next.round())),
+                ),
+                Row(
+                  children: [
+                    Text(_formatDuration(position)),
+                    const Spacer(),
+                    Text(
+                      duration == null ? '--:--' : _formatDuration(duration),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _PodcastArtwork extends StatelessWidget {
+  const _PodcastArtwork({required this.url, required this.size});
+
+  final String? url;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = url;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: imageUrl == null || imageUrl.isEmpty
+          ? Image.asset(
+              'assets/images/app_icon.png',
+              height: size,
+              width: size,
+              fit: BoxFit.cover,
+            )
+          : CachedNetworkImage(
+              imageUrl: imageUrl,
+              height: size,
+              width: size,
+              fit: BoxFit.cover,
+              placeholder: (_, _) => Container(
+                height: size,
+                width: size,
+                color: Theme.of(context).colorScheme.primaryContainer,
+              ),
+              errorWidget: (_, _, _) => Image.asset(
+                'assets/images/app_icon.png',
+                height: size,
+                width: size,
+                fit: BoxFit.cover,
+              ),
+            ),
+    );
+  }
+}
+
+String _formatDuration(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  if (hours > 0) return '$hours:$minutes:$seconds';
+  return '${duration.inMinutes}:$seconds';
 }
 
 class PostCard extends StatelessWidget {
@@ -2035,6 +2649,12 @@ String _excerpt(String markdown) {
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
   return clean.length > 180 ? '${clean.substring(0, 180)}...' : clean;
+}
+
+String _podcastMainDescription(String value) {
+  final markerIndex = value.toLowerCase().indexOf('nuestras plataformas:');
+  if (markerIndex < 0) return value;
+  return value.substring(0, markerIndex).trim();
 }
 
 void _snack(BuildContext context, String message) {

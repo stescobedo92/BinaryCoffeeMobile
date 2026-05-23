@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/binary_coffee_api.dart';
+import '../models/podcast_episode.dart';
 import '../models/post.dart';
 import '../models/user_session.dart';
 import 'session_store.dart';
@@ -19,6 +20,7 @@ class AppController extends ChangeNotifier {
   final List<Post> topViewedPosts = [];
   final List<Post> topCommentedPosts = [];
   final List<Post> topLikedPosts = [];
+  final List<PodcastEpisode> podcastEpisodes = [];
   final List<Post> cachedPosts = [];
   final List<String> recentSearches = [];
   final List<String> readHistoryPostIds = [];
@@ -28,6 +30,7 @@ class AppController extends ChangeNotifier {
   bool initialized = false;
   bool loading = false;
   bool loadingMore = false;
+  bool loadingPodcasts = false;
   bool hasMore = true;
   bool darkMode = true;
   bool notificationsEnabled = true;
@@ -38,6 +41,7 @@ class AppController extends ChangeNotifier {
   String? authorId;
   String? authorName;
   String? error;
+  String? podcastError;
   String? newPostName;
 
   Future<void> init() async {
@@ -63,6 +67,28 @@ class AppController extends ChangeNotifier {
     initialized = true;
     notifyListeners();
     await Future.wait([loadTags(), refresh(), loadHighlights()]);
+  }
+
+  Future<void> loadPodcasts() async {
+    if (podcastEpisodes.isNotEmpty || loadingPodcasts) return;
+    loadingPodcasts = true;
+    podcastError = null;
+    notifyListeners();
+    try {
+      podcastEpisodes
+        ..clear()
+        ..addAll(await api.getEspacioBinarioEpisodes());
+    } catch (e) {
+      podcastError = e.toString();
+    } finally {
+      loadingPodcasts = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refreshPodcasts() async {
+    podcastEpisodes.clear();
+    await loadPodcasts();
   }
 
   Future<void> loadTags() async {

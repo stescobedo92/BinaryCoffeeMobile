@@ -1,7 +1,10 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:xml/xml.dart';
 
+import '../models/podcast_episode.dart';
 import '../models/post.dart';
 import '../models/user_session.dart';
 
@@ -13,6 +16,12 @@ class BinaryCoffeeApi {
   static const dashboardUrl = 'https://binarycoffee.dev/dashboard';
   static const githubClientId = 'c37fad75ee13b3261065';
   static const appAuthCallback = 'binarycoffee://auth';
+  static const espacioBinarioSpotifyUrl =
+      'https://open.spotify.com/show/4Qj5q7Y76QLCtmPaWYv4Yk';
+  static const espacioBinarioFeedUrl =
+      'https://anchor.fm/s/1c6df2b0/podcast/rss';
+  static const espacioBinarioArtworkUrl =
+      'https://d3t3ozftmdmh3i.cloudfront.net/production/podcast_uploaded/4669676/4669676-1586574061149-68b8b3e2af157.jpg';
 
   final http.Client _client;
 
@@ -139,6 +148,56 @@ class BinaryCoffeeApi {
     }, jwt);
   }
 
+  Future<List<PodcastEpisode>> getEspacioBinarioEpisodes() async {
+    final response = await _client.get(Uri.parse(espacioBinarioFeedUrl));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw BinaryCoffeeApiException('HTTP ${response.statusCode}');
+    }
+    final document = XmlDocument.parse(response.body);
+    final channelImage =
+        document
+            .findAllElements('image')
+            .firstOrNull
+            ?.getElement('url')
+            ?.innerText
+            .trim() ??
+        document
+            .findAllElements('itunes:image')
+            .firstOrNull
+            ?.getAttribute('href');
+    return document
+        .findAllElements('item')
+        .map((item) {
+          final enclosure = item.getElement('enclosure');
+          final guid = item.getElement('guid')?.innerText.trim();
+          final title = item.getElement('title')?.innerText.trim() ?? 'Episode';
+          final audioUrl = enclosure?.getAttribute('url') ?? '';
+          final publishedAt = _parsePodcastDate(
+            item.getElement('pubDate')?.innerText,
+          );
+          return PodcastEpisode(
+            id: guid?.isNotEmpty == true ? guid! : audioUrl,
+            title: title,
+            description: _plainText(
+              item.getElement('description')?.innerText ??
+                  item.getElement('itunes:summary')?.innerText ??
+                  '',
+            ),
+            audioUrl: audioUrl,
+            publishedAt: publishedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+            duration: _parseDuration(
+              item.getElement('itunes:duration')?.innerText,
+            ),
+            imageUrl: channelImage ?? espacioBinarioArtworkUrl,
+            episodeNumber: int.tryParse(
+              item.getElement('itunes:episode')?.innerText.trim() ?? '',
+            ),
+          );
+        })
+        .where((episode) => episode.audioUrl.isNotEmpty)
+        .toList();
+  }
+
   Uri githubAuthorizeUri() {
     final redirect = Uri.parse(
       '$dashboardUrl/provider/github',
@@ -180,6 +239,41 @@ class BinaryCoffeeApi {
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'(^-|-$)'), '');
+
+  static Duration? _parseDuration(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final parts = value.trim().split(':').map(int.tryParse).toList();
+    if (parts.any((part) => part == null)) return null;
+    if (parts.length == 3) {
+      return Duration(hours: parts[0]!, minutes: parts[1]!, seconds: parts[2]!);
+    }
+    if (parts.length == 2) {
+      return Duration(minutes: parts[0]!, seconds: parts[1]!);
+    }
+    if (parts.length == 1) return Duration(seconds: parts[0]!);
+    return null;
+  }
+
+  static DateTime? _parsePodcastDate(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final trimmed = value.trim();
+    return DateTime.tryParse(trimmed) ??
+        DateFormat(
+          'EEE, dd MMM yyyy HH:mm:ss z',
+          'en_US',
+        ).tryParseUtc(trimmed)?.toLocal();
+  }
+
+  static String _plainText(String value) => value
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]+>'), '')
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'")
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
 }
 
 class BinaryCoffeeApiException implements Exception {
