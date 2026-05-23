@@ -1,17 +1,57 @@
-# binary_coffee_mobile
+# Binary Coffee Mobile
 
-A new Flutter project.
+Flutter app for reading and interacting with Binary Coffee articles on Android, macOS, Windows, and Linux.
 
-## Getting Started
+The app follows the same public GraphQL API used by the Binary Coffee Edge extension:
 
-This project is a starting point for a Flutter application.
+- `https://api.binarycoffee.dev/graphql`
+- Article list with `enable: true`, pagination, search, tags, author filter, stats, banners, avatars, and article detail.
+- Authenticated actions for GitHub login, likes, comments, drafts, profile, user posts, stats, and subscription.
 
-A few resources to get you started if this is your first Flutter project:
+## Design
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+The UI adapts the Binary Coffee web identity to mobile and desktop:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Primary palette from the site and extension: `#19C65E`, `#01CD6A`, light `#FAFFFE`, and dark `#111B21`.
+- Fira Code font from the Binary Coffee frontend assets.
+- App icons and imagery from `binary-coffee-dev/our-identity`.
+- Native Material 3 widgets so each desktop/mobile target keeps a platform-friendly look and feel.
+
+## GitHub Auth
+
+GitHub authentication opens the same OAuth provider flow used by the Binary Coffee dashboard client. Paste the returned `code` into the app, and the app exchanges it with:
+
+```graphql
+mutation($provider: String!, $code: String!) {
+  loginWithProvider(provider: $provider, code: $code)
+}
+```
+
+The profile screen also accepts an existing JWT, which mirrors the extension's token-based session path.
+
+## Local Development
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter run
+```
+
+## Builds
+
+```bash
+flutter build apk --release
+flutter build macos --release
+flutter build windows --release
+flutter build linux --release
+```
+
+Desktop builds must run on their native OS runners. The GitHub Actions workflows package:
+
+- Android `.apk`
+- macOS `.dmg`
+- Windows `.zip` containing the `.exe`
+- Linux `.deb`
+
+Release artifacts are published when pushing a tag like `v1.0.0`.
