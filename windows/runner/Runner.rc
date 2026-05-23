@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "dev.binarycoffee" "\0"
-            VALUE "FileDescription", "binary_coffee_mobile" "\0"
+            VALUE "FileDescription", "Binary Coffee" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "binary_coffee_mobile" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 dev.binarycoffee. All rights reserved." "\0"
             VALUE "OriginalFilename", "binary_coffee_mobile.exe" "\0"
-            VALUE "ProductName", "binary_coffee_mobile" "\0"
+            VALUE "ProductName", "Binary Coffee" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
