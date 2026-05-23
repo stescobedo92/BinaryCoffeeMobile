@@ -326,6 +326,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   posts: controller.topCommentedPosts,
                   onOpen: (post) => _openPost(context, post),
                 ),
+                _HighlightRail(
+                  title: 'Mas gustados',
+                  posts: controller.topLikedPosts,
+                  onOpen: (post) => _openPost(context, post),
+                ),
               ],
             ),
           ),
@@ -1352,14 +1357,17 @@ class _AuthorDetailScreenState extends State<AuthorDetailScreen> {
                               '${posts[i].title}\n${BinaryCoffeeApi.siteUrl}/post/${posts[i].name}',
                         ),
                       ),
-                      onOpen: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => PostDetailScreen(
-                            controller: widget.controller,
-                            post: posts[i],
+                      onOpen: () {
+                        widget.controller.markOpened(posts[i]);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PostDetailScreen(
+                              controller: widget.controller,
+                              post: posts[i],
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ),
               ],

@@ -23,6 +23,7 @@ class SessionStore {
   static const _likedPostIdsKey = 'blog.likedPostIds';
   static const _lastSeenLatestPostNameKey = 'blog.lastSeenLatestPostName';
   static const _maxRecentSearches = 8;
+  static const _maxCachedPosts = 40;
 
   Future<UserSession?> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -150,10 +151,12 @@ class SessionStore {
     final prefs = await SharedPreferences.getInstance();
     final postIds = prefs.getStringList(_cachedPostIdsKey) ?? const [];
     await prefs.setString(_cachedPostKey(post.id), jsonEncode(post.toJson()));
-    await prefs.setStringList(
-      _cachedPostIdsKey,
-      _moveToFront(postIds, post.id),
-    );
+    final updated = _moveToFront(postIds, post.id);
+    final kept = updated.take(_maxCachedPosts).toList();
+    for (final staleId in updated.skip(_maxCachedPosts)) {
+      await prefs.remove(_cachedPostKey(staleId));
+    }
+    await prefs.setStringList(_cachedPostIdsKey, kept);
   }
 
   Future<void> removeCachedPost(String postId) async {

@@ -231,9 +231,13 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> toggleFavorite(Post post) async {
+    await store.cacheOpenedPost(post);
     favoritePostIds
       ..clear()
       ..addAll(await store.toggleFavoritePostId(post.id));
+    cachedPosts
+      ..clear()
+      ..addAll(await store.loadCachedPosts());
     notifyListeners();
   }
 
