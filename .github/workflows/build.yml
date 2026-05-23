@@ -170,6 +170,9 @@ jobs:
         run: |
           APP=binary-coffee
           VERSION=${GITHUB_REF_NAME#v}
+          if ! [[ "$VERSION" =~ ^[0-9] ]]; then
+            VERSION=$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -n 1 | cut -d+ -f1)
+          fi
           VERSION=${VERSION:-1.0.0}
           ROOT=dist/deb/${APP}_${VERSION}_amd64
           mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/lib/$APP" "$ROOT/usr/share/applications" "$ROOT/usr/share/icons/hicolor/256x256/apps"
