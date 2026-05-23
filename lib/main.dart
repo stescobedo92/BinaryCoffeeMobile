@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -40,12 +41,17 @@ class BinaryCoffeeApp extends StatelessWidget {
           seedColor: AppColors.primaryDark,
           brightness: Brightness.dark,
         );
+        unawaited(AppIconSync.setDarkIcon(controller.darkMode));
         return MaterialApp(
           title: 'Binary Coffee',
           debugShowCheckedModeBanner: false,
           themeMode: controller.darkMode ? ThemeMode.dark : ThemeMode.light,
           theme: _theme(lightScheme),
           darkTheme: _theme(darkScheme, dark: true),
+          builder: (context, child) => _TextScope(
+            text: AppText(controller.languageCode),
+            child: child ?? const SizedBox.shrink(),
+          ),
           home: HomeScreen(controller: controller),
         );
       },
@@ -79,7 +85,17 @@ class BinaryCoffeeApp extends StatelessWidget {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
         isDense: true,
       ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          fixedSize: const Size.square(40),
+          minimumSize: const Size.square(40),
+          padding: EdgeInsets.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
       appBarTheme: AppBarTheme(
+        toolbarHeight: 48,
         centerTitle: false,
         backgroundColor: dark ? AppColors.darkChrome : Colors.white,
         surfaceTintColor: Colors.transparent,
@@ -91,11 +107,13 @@ class BinaryCoffeeApp extends StatelessWidget {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
+        height: 56,
         backgroundColor: dark ? AppColors.darkChrome : Colors.white,
         indicatorColor: scheme.primary.withValues(alpha: .16),
         labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          TextStyle(fontSize: 9, fontWeight: FontWeight.w700),
         ),
+        iconTheme: const WidgetStatePropertyAll(IconThemeData(size: 20)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: dark ? AppColors.darkChrome : Colors.white,
@@ -106,6 +124,112 @@ class BinaryCoffeeApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class AppIconSync {
+  static const _channel = MethodChannel('binarycoffee/app_icon');
+  static bool? _lastDark;
+
+  static Future<void> setDarkIcon(bool dark) async {
+    if (_lastDark == dark) return;
+    _lastDark = dark;
+    try {
+      await _channel.invokeMethod<void>('setDarkIcon', {'dark': dark});
+    } catch (_) {}
+  }
+}
+
+class _TextScope extends InheritedWidget {
+  const _TextScope({required this.text, required super.child});
+  final AppText text;
+
+  @override
+  bool updateShouldNotify(_TextScope oldWidget) =>
+      text.languageCode != oldWidget.text.languageCode;
+}
+
+extension AppTextContext on BuildContext {
+  AppText get text =>
+      dependOnInheritedWidgetOfExactType<_TextScope>()?.text ?? AppText('en');
+}
+
+class AppText {
+  AppText(String code) : languageCode = code == 'es' ? 'es' : 'en';
+  final String languageCode;
+  bool get es => languageCode == 'es';
+  String get locale => es ? 'es' : 'en';
+  String get lightMode => es ? 'Modo claro' : 'Light mode';
+  String get darkMode => es ? 'Modo oscuro' : 'Dark mode';
+  String get language => es ? 'Idioma' : 'Language';
+  String get profile => es ? 'Perfil' : 'Profile';
+  String get home => es ? 'Inicio' : 'Home';
+  String get saved => es ? 'Guardados' : 'Saved';
+  String get history => es ? 'Historial' : 'History';
+  String get offline => 'Offline';
+  String get draft => es ? 'Borrador' : 'Draft';
+  String get savedEmpty => es
+      ? 'Guarda articulos para leerlos despues.'
+      : 'Save articles to read later.';
+  String get historyEmpty => es
+      ? 'Los articulos que abras apareceran aqui.'
+      : 'Articles you open will appear here.';
+  String get offlineEmpty => es
+      ? 'Abre articulos para dejarlos disponibles offline.'
+      : 'Open articles to make them available offline.';
+  String get newArticles =>
+      es ? 'Hay articulos nuevos' : 'New articles available';
+  String get clear => es ? 'Limpiar' : 'Clear';
+  String get mostViewed => es ? 'Mas vistos' : 'Most viewed';
+  String get mostCommented => es ? 'Mas comentados' : 'Most commented';
+  String get mostLiked => es ? 'Mas gustados' : 'Most liked';
+  String get searchArticles => es ? 'Buscar articulos' : 'Search articles';
+  String get filters => es ? 'Filtros' : 'Filters';
+  String get filterByTag => es ? 'Filtrar por tag' : 'Filter by tag';
+  String get removeSaved => es ? 'Quitar guardado' : 'Remove saved';
+  String get save => es ? 'Guardar' : 'Save';
+  String get share => es ? 'Compartir' : 'Share';
+  String get openSite =>
+      es ? 'Abrir en binarycoffee.dev' : 'Open on binarycoffee.dev';
+  String get article => es ? 'Articulo' : 'Article';
+  String get normalView => es ? 'Vista normal' : 'Normal view';
+  String get readingMode => es ? 'Modo lectura' : 'Reading mode';
+  String get minRead => es ? 'min lectura' : 'min read';
+  String commentsCount(int count) =>
+      es ? 'Comentarios ($count)' : 'Comments ($count)';
+  String get noComments => es ? 'Sin comentarios aun' : 'No comments yet';
+  String get writeComment => es ? 'Escribe un comentario' : 'Write a comment';
+  String get comment => es ? 'Comentar' : 'Comment';
+  String get myProfile => es ? 'Mi perfil' : 'My profile';
+  String get filterPosts => es ? 'Filtrar posts' : 'Filter posts';
+  String get confirmed => es ? 'confirmado' : 'confirmed';
+  String get localNotifications =>
+      es ? 'Notificaciones locales' : 'Local notifications';
+  String get myPosts => es ? 'Mis posts' : 'My posts';
+  String get stats => es ? 'Estadisticas' : 'Stats';
+  String get subscribe => es ? 'Suscribirme' : 'Subscribe';
+  String get logout => es ? 'Cerrar sesion' : 'Sign out';
+  String get signIn => es ? 'Iniciar sesion' : 'Sign in';
+  String get signInCopy => es
+      ? 'Continua con tu cuenta para comentar, dar like y crear borradores.'
+      : 'Continue with your account to comment, like, and create drafts.';
+  String get continueGithub =>
+      es ? 'Continuar con GitHub' : 'Continue with GitHub';
+  String get done => es ? 'Listo' : 'Done';
+  String get githubSignedIn =>
+      es ? 'Sesion iniciada con GitHub' : 'Signed in with GitHub';
+  String get close => es ? 'Cerrar' : 'Close';
+  String get createDraft => es ? 'Crear borrador' : 'Create draft';
+  String get title => es ? 'Titulo' : 'Title';
+  String get edit => es ? 'Editar' : 'Edit';
+  String get preview => 'Preview';
+  String get markdownContent => es ? 'Contenido Markdown' : 'Markdown content';
+  String get noMore => es ? 'No hay mas articulos' : 'No more articles';
+  String get loadMore => es ? 'Cargar mas' : 'Load more';
+  String get retry => es ? 'Reintentar' : 'Retry';
+  String authorPosts(String name) => es ? 'Posts de $name' : '$name posts';
+  String loadedStats(int posts, int views, int likes, int comments) => es
+      ? 'Posts cargados: $posts\nViews: $views\nLikes: $likes\nComentarios: $comments'
+      : 'Loaded posts: $posts\nViews: $views\nLikes: $likes\nComments: $comments';
 }
 
 class HomeScreen extends StatefulWidget {
@@ -149,6 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final text = context.text;
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
@@ -156,20 +281,21 @@ class _HomeScreenState extends State<HomeScreen> {
         final wide = width >= 840;
         return Scaffold(
           appBar: AppBar(
-            titleSpacing: 12,
+            titleSpacing: 8,
             title: Row(
               children: [
                 Image.asset(
                   'assets/images/title_icon.png',
-                  height: 28,
-                  width: 28,
+                  height: 22,
+                  width: 22,
                   fit: BoxFit.contain,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 7),
                 Text(
                   'Binary Coffee',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -177,7 +303,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             actions: [
               IconButton(
-                tooltip: controller.darkMode ? 'Modo claro' : 'Modo oscuro',
+                tooltip: controller.darkMode ? text.lightMode : text.darkMode,
                 onPressed: () => controller.setDarkMode(!controller.darkMode),
                 icon: Icon(
                   controller.darkMode
@@ -186,7 +312,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               IconButton(
-                tooltip: 'Perfil',
+                tooltip: text.language,
+                onPressed: () => controller.setLanguageCode(
+                  controller.languageCode == 'en' ? 'es' : 'en',
+                ),
+                icon: Text(
+                  controller.languageCode.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: text.profile,
                 onPressed: () => _openProfile(context),
                 icon: controller.session?.avatarUrl == null
                     ? const Icon(Icons.person_outline)
@@ -208,23 +347,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (_tabIndex == 1)
                   _savedSliver(
                     context,
-                    title: 'Guardados',
+                    title: text.saved,
                     posts: controller.favoritePosts,
-                    empty: 'Guarda articulos para leerlos despues.',
+                    empty: text.savedEmpty,
                   ),
                 if (_tabIndex == 2)
                   _savedSliver(
                     context,
-                    title: 'Historial',
+                    title: text.history,
                     posts: controller.readHistoryPosts,
-                    empty: 'Los articulos que abras apareceran aqui.',
+                    empty: text.historyEmpty,
                   ),
                 if (_tabIndex == 3)
                   _savedSliver(
                     context,
-                    title: 'Offline',
+                    title: text.offline,
                     posts: controller.cachedPosts,
-                    empty: 'Abre articulos para dejarlos disponibles offline.',
+                    empty: text.offlineEmpty,
                   ),
               ],
             ),
@@ -232,26 +371,26 @@ class _HomeScreenState extends State<HomeScreen> {
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tabIndex,
             onDestinationSelected: (value) => setState(() => _tabIndex = value),
-            destinations: const [
+            destinations: [
               NavigationDestination(
-                icon: Icon(Icons.dynamic_feed_outlined),
-                selectedIcon: Icon(Icons.dynamic_feed),
-                label: 'Inicio',
+                icon: const Icon(Icons.dynamic_feed_outlined),
+                selectedIcon: const Icon(Icons.dynamic_feed),
+                label: text.home,
               ),
               NavigationDestination(
-                icon: Icon(Icons.bookmark_border),
-                selectedIcon: Icon(Icons.bookmark),
-                label: 'Guardados',
+                icon: const Icon(Icons.bookmark_border),
+                selectedIcon: const Icon(Icons.bookmark),
+                label: text.saved,
               ),
               NavigationDestination(
-                icon: Icon(Icons.history_outlined),
-                selectedIcon: Icon(Icons.history),
-                label: 'Historial',
+                icon: const Icon(Icons.history_outlined),
+                selectedIcon: const Icon(Icons.history),
+                label: text.history,
               ),
               NavigationDestination(
-                icon: Icon(Icons.offline_pin_outlined),
-                selectedIcon: Icon(Icons.offline_pin),
-                label: 'Offline',
+                icon: const Icon(Icons.offline_pin_outlined),
+                selectedIcon: const Icon(Icons.offline_pin),
+                label: text.offline,
               ),
             ],
           ),
@@ -260,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
               : FloatingActionButton.extended(
                   onPressed: () => _openDraft(context),
                   icon: const Icon(Icons.edit_note_outlined),
-                  label: const Text('Borrador'),
+                  label: Text(text.draft),
                 ),
         );
       },
@@ -284,7 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: FilledButton.tonalIcon(
               onPressed: controller.refresh,
               icon: const Icon(Icons.fiber_new_outlined),
-              label: const Text('Hay articulos nuevos'),
+              label: Text(context.text.newArticles),
             ),
           ),
         ),
@@ -295,12 +434,12 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: MaterialBanner(
-              content: Text('Posts de ${controller.authorName}'),
+              content: Text(context.text.authorPosts(controller.authorName!)),
               leading: const Icon(Icons.person_search_outlined),
               actions: [
                 TextButton(
                   onPressed: controller.clearAuthorFilter,
-                  child: const Text('Limpiar'),
+                  child: Text(context.text.clear),
                 ),
               ],
             ),
@@ -317,17 +456,17 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: [
                 _HighlightRail(
-                  title: 'Mas vistos',
+                  title: context.text.mostViewed,
                   posts: controller.topViewedPosts,
                   onOpen: (post) => _openPost(context, post),
                 ),
                 _HighlightRail(
-                  title: 'Mas comentados',
+                  title: context.text.mostCommented,
                   posts: controller.topCommentedPosts,
                   onOpen: (post) => _openPost(context, post),
                 ),
                 _HighlightRail(
-                  title: 'Mas gustados',
+                  title: context.text.mostLiked,
                   posts: controller.topLikedPosts,
                   onOpen: (post) => _openPost(context, post),
                 ),
@@ -342,7 +481,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     if (controller.error != null && controller.posts.isEmpty)
       SliverFillRemaining(
-        child: _ErrorState(message: controller.error!, onRetry: controller.refresh),
+        child: _ErrorState(
+          message: controller.error!,
+          onRetry: controller.refresh,
+        ),
       ),
     if (!controller.loading || controller.posts.isNotEmpty)
       SliverPadding(
@@ -395,8 +537,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Text(
                         title,
-                        style: Theme.of(context).textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   );
@@ -410,7 +553,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     favorite: controller.favoritePostIds.contains(post.id),
                     liked: controller.likedPostIds.contains(post.id),
                     onAuthor: (author) => _openAuthor(context, author),
-                    onLike: () => _guarded(context, () => controller.like(post)),
+                    onLike: () =>
+                        _guarded(context, () => controller.like(post)),
                     onFavorite: () => controller.toggleFavorite(post),
                     onShare: () => _share(post),
                     onOpen: () => _openPost(context, post),
@@ -440,7 +584,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final handled = await controller.handleAuthRedirect(uri);
     if (handled && mounted) {
       Navigator.of(context).maybePop();
-      _snack(context, 'Sesion iniciada con GitHub');
+      _snack(context, context.text.githubSignedIn);
       return;
     }
     final name = _postNameFromUri(uri);
@@ -517,7 +661,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openAuthor(BuildContext context, Author author) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => AuthorDetailScreen(controller: controller, author: author),
+        builder: (_) =>
+            AuthorDetailScreen(controller: controller, author: author),
       ),
     );
   }
@@ -546,6 +691,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = context.text;
     return _Constrained(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
@@ -557,10 +703,11 @@ class _Header extends StatelessWidget {
                 color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
-                color: controller.selectedTag.isEmpty
-                        && controller.selectedTags.isEmpty
-                    ? Theme.of(context).dividerColor.withValues(alpha: .35)
-                    : Theme.of(context).colorScheme.primary,
+                  color:
+                      controller.selectedTag.isEmpty &&
+                          controller.selectedTags.isEmpty
+                      ? Theme.of(context).dividerColor.withValues(alpha: .35)
+                      : Theme.of(context).colorScheme.primary,
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -574,13 +721,13 @@ class _Header extends StatelessWidget {
                 controller: searchController,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search),
-                  hintText: 'Buscar articulos',
+                  hintText: text.searchArticles,
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 15),
                   suffixIcon: IconButton(
-                    tooltip: 'Filtros',
+                    tooltip: text.filters,
                     onPressed: onFilters,
                     icon: Badge(
                       isLabelVisible: controller.selectedTag.isNotEmpty,
@@ -617,7 +764,8 @@ class _Header extends StatelessWidget {
                   ],
                 ),
               ),
-            if (controller.recentSearches.isNotEmpty && controller.search.isEmpty)
+            if (controller.recentSearches.isNotEmpty &&
+                controller.search.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: SizedBox(
@@ -654,6 +802,7 @@ class FilterSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = context.text;
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) => Padding(
@@ -665,7 +814,7 @@ class FilterSheet extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  'Filtrar por tag',
+                  text.filterByTag,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -675,7 +824,7 @@ class FilterSheet extends StatelessWidget {
                     controller.selectedTags.isNotEmpty)
                   TextButton(
                     onPressed: controller.clearTags,
-                    child: const Text('Limpiar'),
+                    child: Text(text.clear),
                   ),
               ],
             ),
@@ -688,7 +837,9 @@ class FilterSheet extends StatelessWidget {
                   children: controller.tags.map((tag) {
                     final selected = controller.selectedTag == tag.name;
                     return FilterChip(
-                      selected: selected || controller.selectedTags.contains(tag.name),
+                      selected:
+                          selected ||
+                          controller.selectedTags.contains(tag.name),
                       label: Text(tag.name),
                       onSelected: (_) {
                         controller.toggleAdvancedTag(tag.name);
@@ -749,7 +900,9 @@ class _HighlightRail extends StatelessWidget {
                       color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Theme.of(context).dividerColor.withValues(alpha: .35),
+                        color: Theme.of(
+                          context,
+                        ).dividerColor.withValues(alpha: .35),
                       ),
                     ),
                     padding: const EdgeInsets.all(10),
@@ -774,9 +927,15 @@ class _HighlightRail extends StatelessWidget {
                         const Spacer(),
                         Row(
                           children: [
-                            _Metric(icon: Icons.visibility_outlined, label: '${post.views}'),
+                            _Metric(
+                              icon: Icons.visibility_outlined,
+                              label: '${post.views}',
+                            ),
                             const SizedBox(width: 10),
-                            _Metric(icon: Icons.chat_bubble_outline, label: '${post.comments}'),
+                            _Metric(
+                              icon: Icons.chat_bubble_outline,
+                              label: '${post.comments}',
+                            ),
                           ],
                         ),
                       ],
@@ -857,6 +1016,7 @@ class PostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = context.text;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
@@ -932,7 +1092,9 @@ class PostCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            DateFormat.yMMMd('es').format(post.publishedAt),
+                            DateFormat.yMMMd(
+                              text.locale,
+                            ).format(post.publishedAt),
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
@@ -957,7 +1119,9 @@ class PostCard extends StatelessWidget {
                         InkWell(
                           onTap: signedIn ? onLike : null,
                           child: _Metric(
-                            icon: liked ? Icons.favorite : Icons.favorite_border,
+                            icon: liked
+                                ? Icons.favorite
+                                : Icons.favorite_border,
                             label: '${post.likes}',
                             faded: !signedIn,
                           ),
@@ -969,7 +1133,7 @@ class PostCard extends StatelessWidget {
                         ),
                         const Spacer(),
                         IconButton(
-                          tooltip: favorite ? 'Quitar guardado' : 'Guardar',
+                          tooltip: favorite ? text.removeSaved : text.save,
                           visualDensity: VisualDensity.compact,
                           icon: Icon(
                             favorite ? Icons.bookmark : Icons.bookmark_border,
@@ -978,13 +1142,13 @@ class PostCard extends StatelessWidget {
                           onPressed: onFavorite,
                         ),
                         IconButton(
-                          tooltip: 'Compartir',
+                          tooltip: text.share,
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.ios_share_outlined, size: 18),
                           onPressed: onShare,
                         ),
                         IconButton.filledTonal(
-                          tooltip: 'Abrir en binarycoffee.dev',
+                          tooltip: text.openSite,
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.open_in_new, size: 16),
                           onPressed: () => launchUrl(
@@ -1034,17 +1198,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final text = context.text;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Articulo'),
+        title: Text(text.article),
         actions: [
           IconButton(
-            tooltip: _readingMode ? 'Vista normal' : 'Modo lectura',
+            tooltip: _readingMode ? text.normalView : text.readingMode,
             onPressed: () => setState(() => _readingMode = !_readingMode),
-            icon: Icon(_readingMode ? Icons.view_agenda : Icons.menu_book_outlined),
+            icon: Icon(
+              _readingMode ? Icons.view_agenda : Icons.menu_book_outlined,
+            ),
           ),
           IconButton(
-            tooltip: 'Compartir',
+            tooltip: text.share,
             onPressed: () => SharePlus.instance.share(
               ShareParams(
                 text:
@@ -1104,7 +1271,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${post.author.username} · ${post.readingTime ?? 0} min lectura · ${DateFormat.yMMMd('es').format(post.publishedAt)}',
+                      '${post.author.username} · ${post.readingTime ?? 0} ${text.minRead} · ${DateFormat.yMMMd(text.locale).format(post.publishedAt)}',
                     ),
                     const SizedBox(height: 12),
                     Wrap(
@@ -1145,23 +1312,23 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     const Divider(height: 28),
                     MarkdownBody(
                       data: post.body,
-                      styleSheet: MarkdownStyleSheet.fromTheme(
-                        Theme.of(context),
-                      ).copyWith(
-                        p: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontSize: _fontSize,
-                          height: _readingMode ? 1.62 : 1.42,
-                        ),
-                      ),
+                      styleSheet:
+                          MarkdownStyleSheet.fromTheme(
+                            Theme.of(context),
+                          ).copyWith(
+                            p: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              fontSize: _fontSize,
+                              height: _readingMode ? 1.62 : 1.42,
+                            ),
+                          ),
                     ),
                     const Divider(height: 32),
                     Text(
-                      'Comentarios (${post.commentsList.length})',
+                      text.commentsCount(post.commentsList.length),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
-                    if (post.commentsList.isEmpty)
-                      const Text('Sin comentarios aun'),
+                    if (post.commentsList.isEmpty) Text(text.noComments),
                     ...post.commentsList.map(
                       (comment) => ListTile(
                         contentPadding: EdgeInsets.zero,
@@ -1181,8 +1348,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         controller: _commentController,
                         minLines: 2,
                         maxLines: 5,
-                        decoration: const InputDecoration(
-                          hintText: 'Escribe un comentario',
+                        decoration: InputDecoration(
+                          hintText: text.writeComment,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -1199,7 +1366,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           );
                         },
                         icon: const Icon(Icons.send_outlined),
-                        label: const Text('Comentar'),
+                        label: Text(text.comment),
                       ),
                     ],
                   ],
@@ -1234,14 +1401,15 @@ class _AuthorDetailScreenState extends State<AuthorDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final text = context.text;
     final isMe = widget.controller.session?.id == widget.author.id;
     final session = widget.controller.session;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isMe ? 'Mi perfil' : widget.author.username),
+        title: Text(isMe ? text.myProfile : widget.author.username),
         actions: [
           IconButton(
-            tooltip: 'Filtrar posts',
+            tooltip: text.filterPosts,
             icon: const Icon(Icons.filter_alt_outlined),
             onPressed: () {
               widget.controller.filterByAuthor(widget.author);
@@ -1286,15 +1454,19 @@ class _AuthorDetailScreenState extends State<AuthorDetailScreen> {
                               children: [
                                 Text(
                                   widget.author.username,
-                                  style: Theme.of(context).textTheme.headlineSmall
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
                                       ?.copyWith(fontWeight: FontWeight.w900),
                                 ),
                                 if (isMe && session != null)
                                   Text(
                                     [
                                       if (session.email != null) session.email!,
-                                      if (session.roleName != null) session.roleName!,
-                                      if (session.confirmed == true) 'confirmado',
+                                      if (session.roleName != null)
+                                        session.roleName!,
+                                      if (session.confirmed == true)
+                                        text.confirmed,
                                     ].join(' · '),
                                   ),
                               ],
@@ -1347,10 +1519,13 @@ class _AuthorDetailScreenState extends State<AuthorDetailScreen> {
                       favorite: widget.controller.favoritePostIds.contains(
                         posts[i].id,
                       ),
-                      liked: widget.controller.likedPostIds.contains(posts[i].id),
+                      liked: widget.controller.likedPostIds.contains(
+                        posts[i].id,
+                      ),
                       onAuthor: (_) {},
                       onLike: () => widget.controller.like(posts[i]),
-                      onFavorite: () => widget.controller.toggleFavorite(posts[i]),
+                      onFavorite: () =>
+                          widget.controller.toggleFavorite(posts[i]),
                       onShare: () => SharePlus.instance.share(
                         ShareParams(
                           text:
@@ -1426,6 +1601,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final session = widget.controller.session;
+    final text = context.text;
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -1451,44 +1627,41 @@ class _ProfileSheetState extends State<ProfileSheet> {
                   [
                     if (session.email != null) session.email!,
                     if (session.roleName != null) session.roleName!,
-                    if (session.confirmed == true) 'confirmado',
+                    if (session.confirmed == true) text.confirmed,
                   ].join(' · '),
                 ),
               ),
               SwitchListTile(
                 value: widget.controller.notificationsEnabled,
                 onChanged: widget.controller.setNotifications,
-                title: const Text('Notificaciones locales'),
+                title: Text(text.localNotifications),
                 secondary: const Icon(Icons.notifications_outlined),
               ),
               ListTile(
                 leading: const Icon(Icons.article_outlined),
-                title: const Text('Mis posts'),
+                title: Text(text.myPosts),
                 onTap: () => _openMyPosts(context),
               ),
               ListTile(
                 leading: const Icon(Icons.query_stats_outlined),
-                title: const Text('Estadisticas'),
+                title: Text(text.stats),
                 onTap: () => _openStats(context),
               ),
               ListTile(
                 leading: const Icon(Icons.mail_outline),
-                title: const Text('Suscribirme'),
+                title: Text(text.subscribe),
                 onTap: () => _run(() => widget.controller.subscribe()),
               ),
               ListTile(
                 leading: const Icon(Icons.logout),
-                title: const Text('Cerrar sesion'),
+                title: Text(text.logout),
                 onTap: () => widget.controller.logout(),
               ),
             ] else ...[
-              Text(
-                'Iniciar sesion',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+              Text(text.signIn, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 6),
               Text(
-                'Continua con tu cuenta para comentar, dar like y crear borradores.',
+                text.signInCopy,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).hintColor,
                 ),
@@ -1520,7 +1693,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         }
                       },
                 icon: const FaIcon(FontAwesomeIcons.github),
-                label: const Text('Continuar con GitHub'),
+                label: Text(text.continueGithub),
               ),
             ],
           ],
@@ -1533,7 +1706,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
     setState(() => _busy = true);
     try {
       await action();
-      if (mounted) _snack(context, 'Listo');
+      if (mounted) _snack(context, context.text.done);
     } catch (e) {
       if (mounted) _snack(context, e.toString());
     } finally {
@@ -1558,9 +1731,14 @@ class _ProfileSheetState extends State<ProfileSheet> {
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Estadisticas'),
+        title: Text(context.text.stats),
         content: Text(
-          'Posts cargados: ${posts.length}\nViews: ${posts.fold<int>(0, (s, p) => s + p.views)}\nLikes: ${posts.fold<int>(0, (s, p) => s + p.likes)}\nComentarios: ${posts.fold<int>(0, (s, p) => s + p.comments)}',
+          context.text.loadedStats(
+            posts.length,
+            posts.fold<int>(0, (s, p) => s + p.views),
+            posts.fold<int>(0, (s, p) => s + p.likes),
+            posts.fold<int>(0, (s, p) => s + p.comments),
+          ),
         ),
       ),
     );
@@ -1608,11 +1786,11 @@ class _GitHubAuthScreenState extends State<GitHubAuthScreen> {
     var params = PlatformWebViewWidgetCreationParams(
       controller: _webViewController.platform,
     );
-    params = AndroidWebViewWidgetCreationParams
-        .fromPlatformWebViewWidgetCreationParams(
-      params,
-      displayWithHybridComposition: true,
-    );
+    params =
+        AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
+          params,
+          displayWithHybridComposition: true,
+        );
     return WebViewWidget.fromPlatformCreationParams(params: params);
   }
 
@@ -1623,7 +1801,7 @@ class _GitHubAuthScreenState extends State<GitHubAuthScreen> {
       if (handled) {
         Navigator.of(context).pop();
         Navigator.of(context).maybePop();
-        _snack(context, 'Sesion iniciada con GitHub');
+        _snack(context, context.text.githubSignedIn);
       }
     } catch (e) {
       if (mounted) _snack(context, e.toString());
@@ -1636,16 +1814,13 @@ class _GitHubAuthScreenState extends State<GitHubAuthScreen> {
       appBar: AppBar(
         title: const Text('GitHub'),
         leading: IconButton(
-          tooltip: 'Cerrar',
+          tooltip: context.text.close,
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.close),
         ),
       ),
       body: Stack(
-        children: [
-          _webView,
-          if (_loading) const LinearProgressIndicator(),
-        ],
+        children: [_webView, if (_loading) const LinearProgressIndicator()],
       ),
     );
   }
@@ -1673,6 +1848,7 @@ class _DraftSheetState extends State<DraftSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final text = context.text;
     return Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -1683,24 +1859,24 @@ class _DraftSheetState extends State<DraftSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-          Text('Crear borrador', style: Theme.of(context).textTheme.titleLarge),
+          Text(text.createDraft, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           TextField(
             controller: _title,
-            decoration: const InputDecoration(labelText: 'Titulo'),
+            decoration: InputDecoration(labelText: text.title),
           ),
           const SizedBox(height: 10),
           SegmentedButton<bool>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: false,
-                icon: Icon(Icons.edit_outlined),
-                label: Text('Editar'),
+                icon: const Icon(Icons.edit_outlined),
+                label: Text(text.edit),
               ),
               ButtonSegment(
                 value: true,
-                icon: Icon(Icons.preview_outlined),
-                label: Text('Preview'),
+                icon: const Icon(Icons.preview_outlined),
+                label: Text(text.preview),
               ),
             ],
             selected: {_preview},
@@ -1725,9 +1901,7 @@ class _DraftSheetState extends State<DraftSheet> {
               minLines: 8,
               maxLines: 14,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Contenido Markdown',
-              ),
+              decoration: InputDecoration(labelText: text.markdownContent),
             ),
           const SizedBox(height: 12),
           FilledButton.icon(
@@ -1748,7 +1922,7 @@ class _DraftSheetState extends State<DraftSheet> {
                     }
                   },
             icon: const Icon(Icons.save_outlined),
-            label: const Text('Crear borrador'),
+            label: Text(text.createDraft),
           ),
         ],
       ),
@@ -1768,9 +1942,9 @@ class _LoadMore extends StatelessWidget {
       );
     }
     if (!controller.hasMore) {
-      return const Padding(
-        padding: EdgeInsets.all(20),
-        child: Center(child: Text('No hay mas articulos')),
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Center(child: Text(context.text.noMore)),
       );
     }
     return Padding(
@@ -1778,7 +1952,7 @@ class _LoadMore extends StatelessWidget {
       child: Center(
         child: FilledButton.tonal(
           onPressed: controller.loadMore,
-          child: const Text('Cargar mas'),
+          child: Text(context.text.loadMore),
         ),
       ),
     );
@@ -1825,7 +1999,7 @@ class _ErrorState extends StatelessWidget {
         children: [
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 12),
-          FilledButton(onPressed: onRetry, child: const Text('Reintentar')),
+          FilledButton(onPressed: onRetry, child: Text(context.text.retry)),
         ],
       ),
     ),

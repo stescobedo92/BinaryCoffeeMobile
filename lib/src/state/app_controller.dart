@@ -31,6 +31,7 @@ class AppController extends ChangeNotifier {
   bool hasMore = true;
   bool darkMode = true;
   bool notificationsEnabled = true;
+  String languageCode = 'en';
   String search = '';
   String selectedTag = '';
   final Set<String> selectedTags = {};
@@ -42,6 +43,7 @@ class AppController extends ChangeNotifier {
   Future<void> init() async {
     darkMode = await store.loadDarkMode();
     notificationsEnabled = await store.loadNotifications();
+    languageCode = await store.loadLanguageCode();
     session = await store.load();
     favoritePostIds
       ..clear()
@@ -193,6 +195,12 @@ class AppController extends ChangeNotifier {
     notificationsEnabled = value;
     notifyListeners();
     await store.saveNotifications(value);
+  }
+
+  Future<void> setLanguageCode(String value) async {
+    languageCode = value == 'es' ? 'es' : 'en';
+    notifyListeners();
+    await store.saveLanguageCode(languageCode);
   }
 
   Future<void> loginWithJwt(String jwt) async {

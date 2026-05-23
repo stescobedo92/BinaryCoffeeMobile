@@ -67,6 +67,15 @@ class SessionStore {
         value,
       );
 
+  Future<String> loadLanguageCode() async =>
+      (await SharedPreferences.getInstance()).getString('languageCode') ?? 'en';
+
+  Future<void> saveLanguageCode(String value) async =>
+      (await SharedPreferences.getInstance()).setString(
+        'languageCode',
+        value == 'es' ? 'es' : 'en',
+      );
+
   Future<Set<String>> loadFavoritePostIds() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getStringList(_favoritePostIdsKey)?.toSet() ?? <String>{};
