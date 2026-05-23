@@ -10,6 +10,7 @@ import 'src/models/post.dart';
 import 'src/state/app_controller.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(BinaryCoffeeApp(controller: AppController()..init()));
 }
 
