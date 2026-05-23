@@ -8,6 +8,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'src/api/binary_coffee_api.dart';
 import 'src/models/post.dart';
@@ -944,6 +945,7 @@ class GitHubAuthScreen extends StatefulWidget {
 
 class _GitHubAuthScreenState extends State<GitHubAuthScreen> {
   late final WebViewController _webViewController;
+  late final WebViewWidget _webView;
   bool _loading = true;
 
   @override
@@ -966,6 +968,19 @@ class _GitHubAuthScreenState extends State<GitHubAuthScreen> {
         ),
       )
       ..loadRequest(widget.controller.api.githubAuthorizeUri());
+    _webView = _buildWebView();
+  }
+
+  WebViewWidget _buildWebView() {
+    var params = PlatformWebViewWidgetCreationParams(
+      controller: _webViewController.platform,
+    );
+    params = AndroidWebViewWidgetCreationParams
+        .fromPlatformWebViewWidgetCreationParams(
+      params,
+      displayWithHybridComposition: true,
+    );
+    return WebViewWidget.fromPlatformCreationParams(params: params);
   }
 
   Future<void> _finish(Uri uri) async {
@@ -995,7 +1010,7 @@ class _GitHubAuthScreenState extends State<GitHubAuthScreen> {
       ),
       body: Stack(
         children: [
-          WebViewWidget(controller: _webViewController),
+          _webView,
           if (_loading) const LinearProgressIndicator(),
         ],
       ),
