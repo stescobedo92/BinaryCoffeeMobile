@@ -39,6 +39,8 @@ dependencies:
   url_launcher: ^6.3.2
   flutter_markdown: ^0.7.7+1
   intl: ^0.20.2
+  app_links: ^7.0.0
+  font_awesome_flutter: ^11.0.0
 
 dev_dependencies:
   flutter_test:

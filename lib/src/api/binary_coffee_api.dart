@@ -12,6 +12,7 @@ class BinaryCoffeeApi {
   static const siteUrl = 'https://binarycoffee.dev';
   static const dashboardUrl = 'https://binarycoffee.dev/dashboard';
   static const githubClientId = 'c37fad75ee13b3261065';
+  static const appAuthCallback = 'binarycoffee://auth';
 
   final http.Client _client;
 
@@ -67,14 +68,6 @@ class BinaryCoffeeApi {
     return ((data['postsSimilar']?['data'] as List<dynamic>?) ?? const [])
         .map((item) => Post.fromJson(item as Map<String, dynamic>))
         .toList();
-  }
-
-  Future<String> loginWithGitHubCode(String code) async {
-    final data = await _graphql(
-      r'mutation($provider: String!, $code: String!) { loginWithProvider(provider: $provider, code: $code) }',
-      {'provider': 'github', 'code': code.trim()},
-    );
-    return data['loginWithProvider'] as String;
   }
 
   Future<UserSession> getMe(String jwt) async {
@@ -134,7 +127,9 @@ class BinaryCoffeeApi {
   }
 
   Uri githubAuthorizeUri() {
-    final redirect = Uri.parse('$dashboardUrl/provider/github');
+    final redirect = Uri.parse(
+      '$dashboardUrl/provider/github',
+    ).replace(queryParameters: {'tokenOn': 'true', 'redir': appAuthCallback});
     return Uri.https('github.com', '/login/oauth/authorize', {
       'client_id': githubClientId,
       'scope': 'read:user read:email read:follow',

@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -89,6 +91,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
+  StreamSubscription<Uri>? _linkSubscription;
   Timer? _debounce;
 
   AppController get controller => widget.controller;
@@ -102,11 +105,13 @@ class _HomeScreenState extends State<HomeScreen> {
         controller.loadMore();
       }
     });
+    _listenForAuthLinks();
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _linkSubscription?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -173,6 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     controller: controller,
                     searchController: _searchController,
                     onSearch: _onSearchChanged,
+                    onFilters: () => _openFilters(context),
                   ),
                 ),
                 if (controller.authorName != null)
@@ -223,7 +229,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             post: controller.posts[index],
                             index: index + 1,
                             signedIn: controller.session != null,
-                            onTag: controller.toggleTag,
                             onAuthor: controller.filterByAuthor,
                             onLike: () => _guarded(
                               context,
@@ -259,6 +264,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _listenForAuthLinks() {
+    final appLinks = AppLinks();
+    appLinks.getInitialLink().then(_handleAuthLink);
+    _linkSubscription = appLinks.uriLinkStream.listen(_handleAuthLink);
+  }
+
+  Future<void> _handleAuthLink(Uri? uri) async {
+    if (uri == null) return;
+    final handled = await controller.handleAuthRedirect(uri);
+    if (handled && mounted) {
+      Navigator.of(context).maybePop();
+      _snack(context, 'Sesion iniciada con GitHub');
+    }
+  }
+
   Future<void> _guarded(
     BuildContext context,
     Future<void> Function() action,
@@ -280,6 +300,15 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => ProfileSheet(controller: controller),
+    );
+  }
+
+  void _openFilters(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => FilterSheet(controller: controller),
     );
   }
 
@@ -306,55 +335,128 @@ class _Header extends StatelessWidget {
     required this.controller,
     required this.searchController,
     required this.onSearch,
+    required this.onFilters,
   });
 
   final AppController controller;
   final TextEditingController searchController;
   final ValueChanged<String> onSearch;
+  final VoidCallback onFilters;
 
   @override
   Widget build(BuildContext context) {
     return _Constrained(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 14, 12, 4),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Bienvenido a Binary Coffee',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'un espacio donde puedes compartir tus ideas',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).hintColor,
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: controller.selectedTag.isEmpty
+                      ? Theme.of(context).dividerColor.withValues(alpha: .35)
+                      : Theme.of(context).colorScheme.primary,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: .08),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: searchController,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search),
+                  hintText: 'Buscar articulos',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                  suffixIcon: IconButton(
+                    tooltip: 'Filtros',
+                    onPressed: onFilters,
+                    icon: Badge(
+                      isLabelVisible: controller.selectedTag.isNotEmpty,
+                      smallSize: 8,
+                      child: const Icon(Icons.tune_rounded),
+                    ),
+                  ),
+                ),
+                onChanged: onSearch,
               ),
             ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: searchController,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Buscar articulos',
-                suffixIcon: Icon(Icons.tune_outlined),
+            if (controller.selectedTag.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: InputChip(
+                  label: Text(controller.selectedTag),
+                  avatar: const Icon(Icons.sell_outlined, size: 16),
+                  onDeleted: () => controller.toggleTag(controller.selectedTag),
+                ),
               ),
-              onChanged: onSearch,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class FilterSheet extends StatelessWidget {
+  const FilterSheet({super.key, required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Filtrar por tag',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                if (controller.selectedTag.isNotEmpty)
+                  TextButton(
+                    onPressed: () =>
+                        controller.toggleTag(controller.selectedTag),
+                    child: const Text('Limpiar'),
+                  ),
+              ],
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: controller.tags.take(18).map((tag) {
-                final selected = controller.selectedTag == tag.name;
-                return FilterChip(
-                  selected: selected,
-                  label: Text(tag.name),
-                  onSelected: (_) => controller.toggleTag(tag.name),
-                );
-              }).toList(),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: controller.tags.map((tag) {
+                    final selected = controller.selectedTag == tag.name;
+                    return FilterChip(
+                      selected: selected,
+                      label: Text(tag.name),
+                      onSelected: (_) {
+                        controller.toggleTag(tag.name);
+                        Navigator.pop(context);
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
           ],
         ),
@@ -369,7 +471,6 @@ class PostCard extends StatelessWidget {
     required this.post,
     required this.index,
     required this.signedIn,
-    required this.onTag,
     required this.onAuthor,
     required this.onLike,
     required this.onOpen,
@@ -378,7 +479,6 @@ class PostCard extends StatelessWidget {
   final Post post;
   final int index;
   final bool signedIn;
-  final ValueChanged<String> onTag;
   final ValueChanged<Author> onAuthor;
   final VoidCallback onLike;
   final VoidCallback onOpen;
@@ -386,7 +486,7 @@ class PostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onOpen,
@@ -394,13 +494,13 @@ class PostCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 42,
-              constraints: const BoxConstraints(minHeight: 170),
+              width: 34,
+              constraints: const BoxConstraints(minHeight: 120),
               color: Theme.of(
                 context,
               ).colorScheme.primary.withValues(alpha: 0.10),
               alignment: Alignment.topCenter,
-              padding: const EdgeInsets.only(top: 14),
+              padding: const EdgeInsets.only(top: 12),
               child: Text(
                 '$index',
                 style: TextStyle(
@@ -411,7 +511,7 @@ class PostCard extends StatelessWidget {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -420,7 +520,7 @@ class PostCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                         child: Image.network(
                           post.bannerUrl!,
-                          height: 128,
+                          height: 82,
                           width: double.infinity,
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => _FallbackBanner(),
@@ -431,16 +531,16 @@ class PostCard extends StatelessWidget {
                       post.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         color: Theme.of(context).colorScheme.primary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 5),
                     Row(
                       children: [
                         CircleAvatar(
-                          radius: 11,
+                          radius: 9,
                           backgroundImage: NetworkImage(
                             post.author.avatarUrl ??
                                 'https://github.com/${post.author.username}.png?size=64',
@@ -451,7 +551,9 @@ class PostCard extends StatelessWidget {
                           onTap: () => onAuthor(post.author),
                           child: Text(
                             post.author.username,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -464,28 +566,14 @@ class PostCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       _excerpt(post.body),
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: post.tags
-                          .take(4)
-                          .map(
-                            (tag) => ActionChip(
-                              label: Text(tag.name),
-                              onPressed: () => onTag(tag.name),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         _Metric(
@@ -507,9 +595,10 @@ class PostCard extends StatelessWidget {
                           label: '${post.comments}',
                         ),
                         const Spacer(),
-                        IconButton(
+                        IconButton.filledTonal(
                           tooltip: 'Abrir en binarycoffee.dev',
-                          icon: const Icon(Icons.open_in_new, size: 18),
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.open_in_new, size: 16),
                           onPressed: () => launchUrl(
                             Uri.parse(
                               '${BinaryCoffeeApi.siteUrl}/post/${post.name}',
@@ -702,16 +791,7 @@ class ProfileSheet extends StatefulWidget {
 }
 
 class _ProfileSheetState extends State<ProfileSheet> {
-  final _jwtController = TextEditingController();
-  final _codeController = TextEditingController();
   bool _busy = false;
-
-  @override
-  void dispose() {
-    _jwtController.dispose();
-    _codeController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -770,47 +850,36 @@ class _ProfileSheetState extends State<ProfileSheet> {
                 'Iniciar sesion',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 10),
-              FilledButton.icon(
-                onPressed: () => launchUrl(
-                  widget.controller.api.githubAuthorizeUri(),
-                  mode: LaunchMode.externalApplication,
+              const SizedBox(height: 6),
+              Text(
+                'Continua con tu cuenta para comentar, dar like y crear borradores.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).hintColor,
                 ),
-                icon: const Icon(Icons.code),
-                label: const Text('Abrir GitHub'),
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _codeController,
-                decoration: const InputDecoration(labelText: 'Code de GitHub'),
-              ),
-              const SizedBox(height: 8),
-              FilledButton(
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(54),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
                 onPressed: _busy
                     ? null
-                    : () => _run(
-                        () => widget.controller.loginWithGitHubCode(
-                          _codeController.text,
-                        ),
-                      ),
-                child: const Text('Completar login GitHub'),
-              ),
-              const Divider(height: 28),
-              TextField(
-                controller: _jwtController,
-                decoration: const InputDecoration(labelText: 'JWT existente'),
-                obscureText: true,
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _busy
-                    ? null
-                    : () => _run(
-                        () => widget.controller.loginWithJwt(
-                          _jwtController.text.trim(),
-                        ),
-                      ),
-                child: const Text('Usar JWT'),
+                    : () async {
+                        setState(() => _busy = true);
+                        try {
+                          await launchUrl(
+                            widget.controller.api.githubAuthorizeUri(),
+                            mode: LaunchMode.externalApplication,
+                          );
+                        } finally {
+                          if (mounted) setState(() => _busy = false);
+                        }
+                      },
+                icon: const FaIcon(FontAwesomeIcons.github),
+                label: const Text('Continuar con GitHub'),
               ),
             ],
           ],
@@ -978,7 +1047,7 @@ class _FallbackBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Image.asset(
     'assets/images/banner_default.jpg',
-    height: 128,
+    height: 82,
     width: double.infinity,
     fit: BoxFit.cover,
   );

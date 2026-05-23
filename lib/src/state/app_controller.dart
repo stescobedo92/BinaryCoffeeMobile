@@ -127,9 +127,13 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loginWithGitHubCode(String code) async {
-    final jwt = await api.loginWithGitHubCode(code);
-    await loginWithJwt(jwt);
+  Future<bool> handleAuthRedirect(Uri uri) async {
+    if (uri.scheme != 'binarycoffee' || uri.host != 'auth') return false;
+    final fragmentParams = Uri.splitQueryString(uri.fragment);
+    final token = uri.queryParameters['token'] ?? fragmentParams['token'];
+    if (token == null || token.isEmpty) return false;
+    await loginWithJwt(token);
+    return true;
   }
 
   Future<void> logout() async {
