@@ -21,7 +21,7 @@ class AppController extends ChangeNotifier {
   bool loading = false;
   bool loadingMore = false;
   bool hasMore = true;
-  bool darkMode = false;
+  bool darkMode = true;
   bool notificationsEnabled = true;
   String search = '';
   String selectedTag = '';

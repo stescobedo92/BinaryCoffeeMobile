@@ -32,7 +32,7 @@ class SessionStore {
   }
 
   Future<bool> loadDarkMode() async =>
-      (await SharedPreferences.getInstance()).getBool('darkMode') ?? false;
+      (await SharedPreferences.getInstance()).getBool('darkMode') ?? true;
 
   Future<void> saveDarkMode(bool value) async =>
       (await SharedPreferences.getInstance()).setBool('darkMode', value);
