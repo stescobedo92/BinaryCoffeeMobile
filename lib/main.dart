@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,8 +10,9 @@ import 'src/api/binary_coffee_api.dart';
 import 'src/models/post.dart';
 import 'src/state/app_controller.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('es');
   runApp(BinaryCoffeeApp(controller: AppController()..init()));
 }
 
