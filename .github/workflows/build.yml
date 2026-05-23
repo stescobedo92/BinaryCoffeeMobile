@@ -1,9 +1,23 @@
 name: Build
 
 on:
+  workflow_dispatch:
   workflow_call:
+    secrets:
+      MACOS_CERTIFICATE_BASE64:
+        required: false
+      MACOS_CERTIFICATE_PASSWORD:
+        required: false
+      MACOS_KEYCHAIN_PASSWORD:
+        required: false
+      APPLE_ID:
+        required: false
+      APPLE_APP_SPECIFIC_PASSWORD:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
 
 jobs:
@@ -41,19 +55,76 @@ jobs:
     name: macOS DMG
     runs-on: macos-latest
     needs: analyze-test
+    env:
+      APP_PATH: build/macos/Build/Products/Release/Binary Coffee.app
+      DMG_PATH: dist/binary-coffee-macos.dmg
+      HAS_MACOS_SIGNING: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' && secrets.MACOS_CERTIFICATE_PASSWORD != '' && secrets.MACOS_KEYCHAIN_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+      - name: Import Developer ID certificate
+        if: ${{ env.HAS_MACOS_SIGNING == 'true' }}
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer_id_application.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          echo "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)
+          if [ -z "$SIGNING_IDENTITY" ]; then
+            echo "No Developer ID Application signing identity found in imported certificate."
+            exit 1
+          fi
+          echo "MACOS_SIGNING_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
       - run: flutter config --enable-macos-desktop
       - run: flutter build macos --release
+      - name: Sign macOS app with Developer ID
+        if: ${{ env.HAS_MACOS_SIGNING == 'true' }}
+        run: |
+          codesign --force --deep --options runtime \
+            --entitlements macos/Runner/Release.entitlements \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+      - name: Ad-hoc sign macOS app
+        if: ${{ env.HAS_MACOS_SIGNING != 'true' }}
+        run: |
+          echo "Developer ID signing secrets were not provided. Building an unsigned development DMG."
+          codesign --force --deep --sign - "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
       - name: Package DMG
         run: |
           mkdir -p dist/dmg-root
-          cp -R "build/macos/Build/Products/Release/Binary Coffee.app" dist/dmg-root/
-          hdiutil create -volname "Binary Coffee" -srcfolder dist/dmg-root -ov -format UDZO dist/binary-coffee-macos.dmg
+          cp -R "$APP_PATH" dist/dmg-root/
+          hdiutil create -volname "Binary Coffee" -srcfolder dist/dmg-root -ov -format UDZO "$DMG_PATH"
+      - name: Sign and notarize DMG
+        if: ${{ env.HAS_MACOS_SIGNING == 'true' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          codesign --force --sign "$MACOS_SIGNING_IDENTITY" "$DMG_PATH"
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+          spctl -a -vv --type open "$DMG_PATH"
       - uses: actions/upload-artifact@v4
         with:
           name: binary-coffee-macos-dmg

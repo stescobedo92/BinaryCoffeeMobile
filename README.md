@@ -153,6 +153,30 @@ flutter build linux --release
 
 Desktop builds must be produced on their native operating system.
 
+### macOS Gatekeeper
+
+The macOS release artifact must be signed with an Apple Developer ID
+certificate and notarized by Apple. If the signing secrets are not configured,
+the workflow still produces a development DMG, but macOS Gatekeeper can show
+`"Binary Coffee" Not Opened` after download.
+
+For local testing of an unsigned development build, copy the app to
+`/Applications` and remove the quarantine attribute:
+
+```bash
+sudo xattr -dr com.apple.quarantine "/Applications/Binary Coffee.app"
+open "/Applications/Binary Coffee.app"
+```
+
+For public distribution, configure these GitHub Actions secrets:
+
+- `MACOS_CERTIFICATE_BASE64`
+- `MACOS_CERTIFICATE_PASSWORD`
+- `MACOS_KEYCHAIN_PASSWORD`
+- `APPLE_ID`
+- `APPLE_APP_SPECIFIC_PASSWORD`
+- `APPLE_TEAM_ID`
+
 ## Release Artifacts
 
 GitHub Actions workflows are configured to build and package:
