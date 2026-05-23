@@ -286,6 +286,8 @@ class AppController extends ChangeNotifier {
     final lastSeen = await store.loadLastSeenLatestPostName();
     if (lastSeen != null && lastSeen != latest) {
       newPostName = latest;
+    } else {
+      newPostName = null;
     }
     await store.saveLastSeenLatestPostName(latest);
     notifyListeners();
