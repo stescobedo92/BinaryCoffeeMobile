@@ -207,7 +207,24 @@ query($name: String!) {
         banner { data { attributes { url, formats } } }
         author { data { id, attributes { username, email, avatarUrl, avatar { data { attributes { url, formats } } } } } }
         tags { data { id, attributes { name } } }
-        commentsList { data { id, attributes { body, createdAt, author { data { attributes { username, avatarUrl, avatar { data { attributes { url, formats } } } } } } } } }
+        commentsList {
+          data {
+            id
+            attributes {
+              body
+              createdAt
+              user {
+                data {
+                  attributes {
+                    username
+                    avatarUrl
+                    avatar { data { attributes { url, formats } } }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

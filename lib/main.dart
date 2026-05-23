@@ -576,11 +576,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             if (snapshot.hasError) {
               return _ErrorState(
                 message: snapshot.error.toString(),
-                onRetry: () => setState(
-                  () => _future = widget.controller.api.getPostByName(
+                onRetry: () => setState(() {
+                  _future = widget.controller.api.getPostByName(
                     widget.post.name,
-                  ),
-                ),
+                  );
+                }),
               );
             }
             return const Center(child: CircularProgressIndicator());

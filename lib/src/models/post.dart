@@ -81,7 +81,9 @@ class Comment {
       createdAt:
           DateTime.tryParse(attrs['createdAt'] as String? ?? '') ??
           DateTime.now(),
-      author: Author.fromJson(attrs['author'] as Map<String, dynamic>?),
+      author: Author.fromJson(
+        (attrs['author'] ?? attrs['user']) as Map<String, dynamic>?,
+      ),
     );
   }
 
