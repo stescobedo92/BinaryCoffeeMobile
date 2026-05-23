@@ -1,57 +1,206 @@
 # Binary Coffee Mobile
 
-Flutter app for reading and interacting with Binary Coffee articles on Android, macOS, Windows, and Linux.
+<p align="center">
+  <img src="assets/images/app_icon.png" alt="Binary Coffee icon" width="112" />
+</p>
 
-The app follows the same public GraphQL API used by the Binary Coffee Edge extension:
+Binary Coffee Mobile is a Flutter application for reading and interacting with
+articles from [binarycoffee.dev](https://binarycoffee.dev). It uses the same
+Binary Coffee GraphQL API consumed by the browser extension, then adapts the
+experience for Android, macOS, Windows, and Linux.
 
-- `https://api.binarycoffee.dev/graphql`
-- Article list with `enable: true`, pagination, search, tags, author filter, stats, banners, avatars, and article detail.
-- Authenticated actions for GitHub login, likes, comments, drafts, profile, user posts, stats, and subscription.
+The app is designed as a technical reading client: compact article cards,
+highlight rails, GitHub authentication, comments, likes, saved articles,
+offline reading, reading history, tag filters, article sharing, and a
+dark-first Binary Coffee visual style.
+
+## Screenshots
+
+<p>
+  <img src="docs/screenshots/home.png" alt="Home feed" width="220" />
+  <img src="docs/screenshots/filters.png" alt="Tag filters" width="220" />
+  <img src="docs/screenshots/article-detail.png" alt="Article detail" width="220" />
+</p>
+
+<p>
+  <img src="docs/screenshots/spanish-toggle.png" alt="Spanish language toggle" width="220" />
+  <img src="docs/screenshots/launcher-icon.png" alt="Android launcher icon" width="220" />
+</p>
+
+## What It Does
+
+- Lists Binary Coffee articles using `https://api.binarycoffee.dev/graphql`.
+- Supports paginated loading, search, author filtering, and multi-tag filters.
+- Shows highlighted sections for most viewed, most commented, and most liked
+  posts.
+- Opens full Markdown article detail with banner, author, metrics, comments,
+  and reading mode.
+- Lets users save articles locally and read cached articles offline.
+- Tracks read history and recent searches on device.
+- Supports native sharing for article URLs.
+- Supports GitHub authentication through the Binary Coffee dashboard OAuth
+  flow.
+- Allows authenticated actions such as likes, comments, drafts, profile stats,
+  and subscription where the API permits them.
+- Uses English by default and includes an in-app `EN/ES` language switch.
+- Uses a dark theme by default, with light/dark theme switching.
+- Switches the Android launcher icon between light and dark variants based on
+  the selected app theme.
+- Registers deep links for Binary Coffee article URLs.
 
 ## Design
 
-The UI adapts the Binary Coffee web identity to mobile and desktop:
+The UI follows the Binary Coffee identity and adapts it to mobile:
 
-- Primary palette from the site and extension: `#19C65E`, `#01CD6A`, light `#FAFFFE`, and dark `#111B21`.
-- Fira Code font from the Binary Coffee frontend assets.
-- App icons and imagery from `binary-coffee-dev/our-identity`.
-- Native Material 3 widgets so each desktop/mobile target keeps a platform-friendly look and feel.
+- Fira Code typography.
+- Dark-first terminal/editorial layout.
+- Binary Coffee green accents.
+- Compact top and bottom navigation.
+- Adaptive Android launcher icons for light and dark themes.
+- Material 3 controls with platform-friendly behavior.
 
-## GitHub Auth
+## Requirements
 
-GitHub authentication opens the same OAuth provider flow used by the Binary Coffee dashboard client. Paste the returned `code` into the app, and the app exchanges it with:
+- Flutter SDK
+- Dart SDK bundled with Flutter
+- Android Studio or Android command line tools for Android builds
+- Xcode for macOS builds
+- Linux build dependencies for Linux packages
+- Visual Studio Build Tools for Windows builds
 
-```graphql
-mutation($provider: String!, $code: String!) {
-  loginWithProvider(provider: $provider, code: $code)
-}
+Check your local setup with:
+
+```bash
+flutter doctor
 ```
 
-The profile screen also accepts an existing JWT, which mirrors the extension's token-based session path.
+## Installation
 
-## Local Development
+Clone the repository and install dependencies:
+
+```bash
+git clone <repository-url>
+cd binary-coffee-mobile
+flutter pub get
+```
+
+Run static analysis and tests:
+
+```bash
+flutter analyze
+flutter test
+```
+
+Run the app on a connected device or emulator:
+
+```bash
+flutter run
+```
+
+Run on a specific Android emulator:
+
+```bash
+flutter devices
+flutter run -d emulator-5554
+```
+
+## Android Emulator Notes
+
+The app was tested with a Pixel emulator. If the emulator does not show a
+software keyboard, enable it with:
+
+```bash
+adb shell settings put secure show_ime_with_hard_keyboard 1
+```
+
+The GitHub login opens inside an embedded WebView, so the emulator does not
+need a Google account just to authenticate with GitHub.
+
+## GitHub Authentication
+
+Authentication uses the Binary Coffee dashboard GitHub provider flow. The app
+opens GitHub OAuth and receives the session token through the
+`binarycoffee://auth` deep link.
+
+The app does not expose manual JWT or GitHub code fields in the UI. Users sign
+in with their GitHub account only.
+
+## Build Commands
+
+Android APK:
+
+```bash
+flutter build apk --release
+```
+
+macOS:
+
+```bash
+flutter build macos --release
+```
+
+Windows:
+
+```bash
+flutter build windows --release
+```
+
+Linux:
+
+```bash
+flutter build linux --release
+```
+
+Desktop builds must be produced on their native operating system.
+
+## Release Artifacts
+
+GitHub Actions workflows are configured to build and package:
+
+- Android `.apk`
+- macOS `.dmg`
+- Windows `.exe`
+- Linux `.deb`
+
+Release workflows publish artifacts when a version tag is pushed.
+
+## Project Structure
+
+```text
+lib/
+  main.dart                         Main Flutter UI and navigation
+  src/api/binary_coffee_api.dart    GraphQL API client
+  src/models/                       Article, author, tag, session models
+  src/state/                        App state and local persistence
+
+assets/
+  fonts/                            Fira Code fonts
+  images/                           App icon, logo, fallback imagery
+
+android/
+macos/
+windows/
+linux/                              Platform runners and packaging targets
+
+docs/screenshots/                   README screenshots
+```
+
+## Useful Development Commands
 
 ```bash
 flutter pub get
 flutter analyze
 flutter test
-flutter run
+flutter run -d emulator-5554
+flutter build apk --debug
 ```
 
-## Builds
+## Notes
 
-```bash
-flutter build apk --release
-flutter build macos --release
-flutter build windows --release
-flutter build linux --release
-```
-
-Desktop builds must run on their native OS runners. The GitHub Actions workflows package:
-
-- Android `.apk`
-- macOS `.dmg`
-- Windows `.zip` containing the `.exe`
-- Linux `.deb`
-
-Release artifacts are published when pushing a tag like `v1.0.0`.
+- The app defaults to English, but users can switch to Spanish from the `EN/ES`
+  button in the top bar.
+- The default theme is dark.
+- Offline reading is based on locally cached articles that the user has opened
+  or saved.
+- Like state is tracked locally because the public read API does not currently
+  expose a reliable `likedByMe` query.
