@@ -16,6 +16,19 @@ class MediaAsset {
   final String? smallUrl;
 
   String? get best => smallUrl ?? thumbnailUrl ?? url;
+
+  Map<String, dynamic> toJson() => {
+    'data': {
+      'attributes': {
+        if (url != null) 'url': url,
+        if (thumbnailUrl != null || smallUrl != null)
+          'formats': {
+            if (thumbnailUrl != null) 'thumbnail': {'url': thumbnailUrl},
+            if (smallUrl != null) 'small': {'url': smallUrl},
+          },
+      },
+    },
+  };
 }
 
 class Author {
@@ -48,6 +61,17 @@ class Author {
   final String username;
   final String? email;
   final String? avatarUrl;
+
+  Map<String, dynamic> toJson() => {
+    'data': {
+      'id': id,
+      'attributes': {
+        'username': username,
+        if (email != null) 'email': email,
+        if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      },
+    },
+  };
 }
 
 class Tag {
@@ -63,6 +87,11 @@ class Tag {
 
   final String id;
   final String name;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'attributes': {'name': name},
+  };
 }
 
 class Comment {
@@ -91,6 +120,15 @@ class Comment {
   final String body;
   final DateTime createdAt;
   final Author author;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'attributes': {
+      'body': body,
+      'createdAt': createdAt.toIso8601String(),
+      'author': author.toJson(),
+    },
+  };
 }
 
 class Post {
@@ -156,6 +194,26 @@ class Post {
   final Author author;
   final List<Tag> tags;
   final List<Comment> commentsList;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'attributes': {
+      'title': title,
+      'name': name,
+      'body': body,
+      'views': views,
+      'likes': likes,
+      'comments': comments,
+      if (readingTime != null) 'readingTime': readingTime,
+      'publishedAt': publishedAt.toIso8601String(),
+      if (bannerUrl != null) 'banner': MediaAsset(url: bannerUrl).toJson(),
+      'author': author.toJson(),
+      'tags': {'data': tags.map((tag) => tag.toJson()).toList()},
+      'commentsList': {
+        'data': commentsList.map((comment) => comment.toJson()).toList(),
+      },
+    },
+  };
 }
 
 int _asInt(Object? value) => int.tryParse(value?.toString() ?? '') ?? 0;
