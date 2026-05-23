@@ -35,9 +35,7 @@ class UserSession {
     email: json['email'],
     avatarUrl: json['avatarUrl'],
     jwt: json['jwt'] ?? '',
-    confirmed: json['confirmed'] == null
-        ? null
-        : json['confirmed'] == 'true',
+    confirmed: json['confirmed'] == null ? null : json['confirmed'] == 'true',
     blocked: json['blocked'] == null ? null : json['blocked'] == 'true',
     roleName: json['roleName'],
   );
